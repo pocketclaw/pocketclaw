@@ -21,9 +21,9 @@
 
 ---
 
-**They said it couldn't be done. 17 hacks later, it's running.**
+**They said it couldn't be done. 20 hacks later, it's running.**
 
-[Setup Guide](#-setup-guide) · [The 17 Hacks](HACKS.md) · [Troubleshooting](#-troubleshooting) · [Contributing](CONTRIBUTING.md)
+[Setup Guide](#-setup-guide) · [The 20 Hacks](HACKS.md) · [Troubleshooting](#-troubleshooting) · [Contributing](CONTRIBUTING.md)
 
 </div>
 
@@ -52,7 +52,7 @@ Bot:     "I'm running on a Moto E2 from 2015 with 1GB of RAM.
 - **Fully autonomous** — watchdog + health checks auto-restart on crash or freeze, survives reboots
 - **`pocketclaw` CLI** — `start`, `stop`, `restart`, `status`, `logs`, `monitor` from one command
 - **RAM-optimized** — runs in 384 MB V8 heap with periodic GC on hardware that has 1 GB total
-- **17 documented hacks** — every impossible problem we hit, and how we solved it
+- **20 documented hacks** — every impossible problem we hit, and how we solved it
 
 ## The Hardware
 
@@ -101,34 +101,55 @@ All connections are **outbound**. The phone calls Telegram and your AI provider 
 
 Running a modern AI gateway on 1 GB RAM requires aggressive optimization. Here's what we measured and tuned:
 
+### Evolution
+
+Every version squeezed more out of the same hardware:
+
+| | **v0** Initial | **v1** Hacks | **v2** Optim | **v3** Stubs |
+|---|---|---|---|---|
+| **Gateway RSS** | ~224 MB | ~224 MB | 233 MB | **196 MB** |
+| **V8 heap** | 384 MB | 384 MB | 384 MB | **350 MB** |
+| **Periodic GC** | - | - | 60s, ~11 MB/cycle | 60s, ~11 MB/cycle |
+| **ESM stubs** | - | - | - | **6 packages stubbed** |
+| **node_modules** | 413 MB | 413 MB | 413 MB | **~230 MB** |
+| **Disk free** | ~100 MB | ~120 MB | 148 MB | **332 MB** |
+| **Crash recovery** | manual | watchdog loop | + healthcheck cron | + healthcheck cron |
+| **Monitoring** | - | - | CSV every 5 min | CSV every 5 min |
+
+**Total gains v0 → v3:** -28 MB RSS (-12.5%), +232 MB disk, -183 MB node_modules (-44%), fully autonomous.
+
 ### Memory budget
 
 | Component | RAM | Notes |
 |---|---|---|
 | Android + GMS | ~430 MB | Not rootable — Google Play Services can't be frozen |
-| OpenClaw gateway | ~200-224 MB | Telegram channel only, ESM bundle |
-| V8 heap headroom | ~160 MB | Boot peak needs ~350 MB, then settles |
-| **Total needed** | **~810 MB** | On 920 MB total |
+| OpenClaw gateway | ~196 MB | Telegram only, ESM stubs for unused channels |
+| V8 heap headroom | ~154 MB | Boot peak needs ~340 MB, then settles to ~196 MB |
+| **Total needed** | **~780 MB** | On 920 MB total — 140 MB margin |
 
 ### What we tuned
 
 | Optimization | Impact |
 |---|---|
-| `--max-old-space-size=384` | Caps V8 heap. 256/320 MB OOM at boot — 384 is the minimum. |
+| `--max-old-space-size=350` | Caps V8 heap. 256/320 OOM at boot, 350 is the minimum with stubs. |
 | `--expose-gc` + periodic GC | Explicit `global.gc()` every 60s frees ~10 MB per cycle |
+| ESM stub packages | Replace 6 unused SDKs (Slack, Discord, LINE, WhatsApp, Playwright) with empty ESM exports. 6 MB vs 70 MB on disk, -25 MB RSS. |
 | Kill GMS sub-processes at startup | Frees ~50-100 MB temporarily (they respawn slowly) |
-| `vm.swappiness=10` | Stops aggressive zram swapping that wastes CPU |
-| Compile cache | Node 22's bytecode cache: 27 MB on disk, faster cold starts |
+| Compile cache | Node 22's bytecode cache, faster cold starts |
 | Concurrency limits | `maxConcurrency: 1`, `maxQueueSize: 2` — no parallel requests |
+| npm cache cleanup | Clear `~/.npm/` after installs — saves ~220 MB disk |
 
 ### What we tested and ruled out
 
 | Idea | Result |
 |---|---|
 | V8 startup snapshot (`--build-snapshot`) | Builds OK (5 MB blob) but ESM restore fails: `ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING` |
-| CJS module stubs (block unused packages) | OpenClaw is 100% ESM bundled by Rolldown — 0 CJS `require()` calls to intercept |
+| CJS module stubs (block `require()`) | OpenClaw is 100% ESM bundled by Rolldown — 0 CJS `require()` calls to intercept |
+| Delete unused npm packages | ESM resolves all imports at link-time, even if code paths are never reached. Deleting packages breaks boot. Stubs are the fix. |
 | Running without proot | Node v22 works via `ld-linux-armhf.so.3` trick, but no RAM savings (same V8 heap) |
-| npm package cleanup | Saves ~123 MB **disk** (not RAM) — packages are never loaded at runtime |
+| `--optimize-for-size` | Not allowed in `NODE_OPTIONS` (Node 22 restriction) |
+| `--jitless` | Works but -6 to -40% CPU perf — not worth it on slow hardware |
+| `--lite-mode` | V8 compile-time only, not a runtime flag |
 | Bun runtime | No ARM32 build available |
 
 ### Monitoring
@@ -140,10 +161,10 @@ $ pocketclaw status
 === PocketClaw Status ===
 Gateway:  RUNNING (PID 12345)
 Uptime:   up 3 days, 2:15
-RAM:      356MB available / 898MB total
-Gateway:  224MB RSS
-Swap:     45MB used (swappiness=10)
-Disk:     271MB free
+RAM:      370MB available / 898MB total
+Gateway:  196MB RSS
+Swap:     45MB used (swappiness=100)
+Disk:     332MB free
 Battery:  87%, 31.2°C
 Crons:    2 active
 ```
@@ -218,6 +239,7 @@ adb push scripts/start-openclaw.sh /sdcard/Download/
 adb push scripts/restart-gw.sh /sdcard/Download/
 adb push scripts/run-proot.sh /sdcard/Download/
 adb push scripts/boot-openclaw.sh /sdcard/Download/
+adb push scripts/create-stubs.sh /sdcard/Download/
 adb push config/openclaw.example.json /sdcard/Download/
 adb push config/env.example /sdcard/Download/
 ```
@@ -232,6 +254,9 @@ cp /sdcard/Download/start-openclaw.sh $PREFIX/bin/start-openclaw
 cp /sdcard/Download/restart-gw.sh $PREFIX/bin/restart-gw
 cp /sdcard/Download/run-proot.sh $PREFIX/bin/run-proot
 chmod +x $PREFIX/bin/start-openclaw $PREFIX/bin/restart-gw $PREFIX/bin/run-proot
+
+# Create ESM stubs (saves 25 MB RAM + 64 MB disk)
+bash /sdcard/Download/create-stubs.sh
 
 # Install proot files
 cp /sdcard/Download/hijack.js $ROOTFS/root/hijack.js
@@ -364,7 +389,7 @@ OpenClaw works with **30+ providers** out of the box. Just change the provider, 
 | `plugins.entries.telegram.enabled: true` | **Required.** Without this, Telegram won't load even if `channels.telegram` is configured. |
 | `reasoning: false` | Prevents extended thinking mode that can cause empty responses. |
 | `network.autoSelectFamily: true` | Enables dual-stack IPv4/IPv6 for better connectivity. |
-| `--max-old-space-size=384` | Caps V8 heap to 384 MB. 256/320 OOM at boot — 384 is the minimum for 1 GB devices. |
+| `--max-old-space-size=350` | Caps V8 heap to 350 MB. 256/320 OOM at boot — 350 works with ESM stubs. |
 | `--expose-gc` | Enables `global.gc()`. Combined with hijack.js timer, frees ~10 MB every 60s. |
 | `maxConcurrency: 1` | One request at a time. More would OOM on 1 GB RAM. |
 
@@ -440,7 +465,7 @@ ADB runs as UID `shell`, can't signal Termux processes. Kill from Termux or SSH 
 ```
 pocketclaw/
 ├── README.md                      # You are here
-├── HACKS.md                       # The 17 hacks — the full war story
+├── HACKS.md                       # The 20 hacks — the full war story
 ├── CONTRIBUTING.md                 # How to contribute
 ├── LICENSE                         # MIT
 ├── config/
@@ -455,6 +480,7 @@ pocketclaw/
     ├── healthcheck.sh             # Cron: restart gateway if unresponsive (every 2 min)
     ├── logrotate.sh               # Cron: trim logs and CSV to 24h (every hour)
     ├── monitor.sh                 # Background: log RAM/CPU/disk/battery to CSV
+    ├── create-stubs.sh            # Replace unused channel SDKs with ESM stubs (-25 MB RSS)
     └── hijack.js                  # Runtime patch: fix os.networkInterfaces + periodic GC
 ```
 
@@ -481,7 +507,7 @@ $ROOTFS/root/
 
 ---
 
-## 🤝 The 17 Hacks
+## 🤝 The 20 Hacks
 
 Every single problem we hit — and the hack that fixed it. From proot crashes to User-Agent spoofing to discovering that killing Google Play Services permanently breaks WiFi.
 
@@ -522,7 +548,7 @@ MIT — do whatever you want with it.
 
 **Built with stubbornness on a mass of impossible constraints.**
 
-*A phone from 2015. 1GB of RAM. 17 hacks.*<br>
+*A phone from 2015. 1GB of RAM. 20 hacks.*<br>
 *If it can run AI, anything can.*
 
 **[Star this repo](https://github.com/MonteiroRobin/pocketclaw)** if you think old phones deserve a second life.

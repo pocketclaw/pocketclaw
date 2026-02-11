@@ -1,6 +1,6 @@
 # PocketClaw — OpenClaw sur un Moto E2 (The Impossible Install)
 
-> "They said it couldn't be done. We did it anyway. 17 hacks later."
+> "They said it couldn't be done. We did it anyway. 20 hacks later."
 
 **Date :** 10-11 février 2026
 **Appareil :** Motorola Moto E2 (2015) — codename `surnia`/`otis`
@@ -22,7 +22,7 @@
 | git | Impossible à installer | Requis par npm | **Absent** |
 
 **Verdict officiel : IMPOSSIBLE.**
-**Verdict réel : 17 hacks plus tard, ça tourne.**
+**Verdict réel : 20 hacks plus tard, ça tourne.**
 
 ---
 
@@ -38,7 +38,7 @@ Avant tout hack logiciel, le téléphone doit être allégé au maximum :
 
 ---
 
-## Les 17 Hacks
+## Les 20 Hacks
 
 ### Hack #1 — proot-distro manuel
 **Problème :** proot-distro n'est pas dans les repos Termux pour Android 6.
@@ -412,6 +412,71 @@ chmod +x ~/.termux/boot/start-openclaw.sh
 
 **Statut : ✅ RÉSOLU — Autonomie complète, auto-restart au boot**
 
+### Hack #18 — Compile cache cleanup
+**Problème :** Node 22 compile automatiquement les modules en bytecode via `module.enableCompileCache()`. Après plusieurs redémarrages, 51 Mo de caches dupliqués s'accumulent dans `$PREFIX/tmp/node-compile-cache/`.
+
+**Solution :** Supprimer périodiquement le dossier. Le cache se reconstruit au prochain boot (~27 Mo). Les reboots suivants sont plus rapides grâce au bytecode pré-compilé.
+
+```bash
+rm -rf $PREFIX/tmp/node-compile-cache/
+# Se reconstruit automatiquement au prochain start
+```
+
+**Gain :** 24 Mo de disque récupérés (51 Mo → 27 Mo). Inclus dans le cron `logrotate-pc`.
+
+### Hack #19 — ESM stubs pour packages inutiles
+**Problème :** OpenClaw bundle **tous** les SDK de channels (Slack, Discord, WhatsApp, LINE, Playwright) via Rolldown (ESM). Même avec les channels désactivés, ESM résout tous les `import` au link-time — **avant** que le code s'exécute. Supprimer les packages npm casse le boot (`ERR_MODULE_NOT_FOUND`). Les stubs CJS ne marchent pas non plus (0 `require()` dans le bundle, tout est ESM).
+
+**Discovery :** Le compile cache montrait que ces fichiers n'étaient pas compilés en bytecode — mais ça veut juste dire que le code n'est pas optimisé par V8, **pas** qu'il n'est pas chargé. ESM linking ≠ compilation. Le mauvais indicateur nous a fait perdre du temps.
+
+**Solution :** Créer des **stub packages ESM** qui exportent les bons noms (classes/fonctions vides). Node résout les imports, le module graph est satisfait, mais le code n'est jamais appelé.
+
+```javascript
+// Exemple: node_modules/@slack/web-api/index.js (stub)
+export class WebClient { constructor() {} }
+```
+
+**6 packages stubbés :** `@slack/web-api`, `@slack/bolt`, `@buape/carbon`, `discord-api-types`, `@line/bot-sdk`, `@whiskeysockets/baileys`, `playwright-core`
+
+**3 packages supprimés** (pas importés du tout) : `@larksuiteoapi` (25 Mo), `@cloudflare` (10 Mo), `@mistralai` (22 Mo)
+
+```bash
+# Créer les stubs (depuis Termux, pas proot)
+bash scripts/create-stubs.sh
+# Re-run après chaque `openclaw update`
+```
+
+**Gain :** -25 Mo RSS (233 → 208 Mo), -64 Mo disque (70 Mo → 6 Mo de stubs), node_modules 413 → ~230 Mo.
+
+**Leçon ESM vs CJS :**
+- CJS : `require()` dans un `if (false)` ne charge jamais le module
+- ESM : `import { X } from "pkg"` est résolu au link-time, avant toute exécution
+- Compile cache = ce qui est compilé en bytecode (optimisation CPU)
+- Import ESM = ce qui est chargé en mémoire (consommation RAM)
+
+### Hack #20 — Heap 350 Mo (post-stubs)
+**Problème :** Le heap V8 (`--max-old-space-size`) contrôle combien de mémoire JavaScript peut utiliser. Avant les stubs : 256 Mo = OOM à 248 Mo, 320 Mo = OOM à 310 Mo, 384 Mo = minimum. V8 expand pour remplir le heap disponible.
+
+**Discovery :** Avec les stubs ESM (Hack #19), le boot peak est plus bas car Node ne charge plus 6 SDK complets. 350 Mo de heap suffit maintenant.
+
+**Solution :** Réduire `--max-old-space-size` de 384 à 350.
+
+```bash
+# Dans start-openclaw.sh
+export NODE_OPTIONS='-r /root/hijack.js --expose-gc --max-old-space-size=350'
+```
+
+**Aussi testé et éliminé :**
+- `--optimize-for-size` : pas autorisé dans `NODE_OPTIONS` (exit code 9)
+- `--jitless` : -6 à -40% perf CPU, pas viable sur Snapdragon 410
+- `--lite-mode` : flag compile-time V8, pas un flag runtime
+
+**Gain :** -12 Mo RSS supplémentaires (208 → 196 Mo).
+
+**Gains combinés Hacks #18-20 :** 233 Mo → 196 Mo RSS (-37 Mo, -16%), 148 Mo → 332 Mo disque libre (+184 Mo).
+
+**Statut : ✅ RÉSOLU — Gateway stable à 196 Mo RSS avec heap 350 Mo**
+
 ---
 
 ## Fichiers Clés sur le Téléphone
@@ -757,4 +822,4 @@ adb shell "run-as com.termux sh -c 'export PREFIX=/data/data/com.termux/files/us
 
 *"On m'a dit que c'était impossible, alors je l'ai fait." — Probablement pas Einstein, mais on s'en fout.*
 
-*Total : ~5 heures du premier `pkg install` au premier message IA reçu sur Telegram. 17 hacks. 0€ de hardware. Un Moto E2 de 2015 qui fait tourner un agent IA autonome en 2026.*
+*Total : ~5 heures du premier `pkg install` au premier message IA reçu sur Telegram. 20 hacks. 0€ de hardware. Un Moto E2 de 2015 qui fait tourner un agent IA autonome en 2026.*
