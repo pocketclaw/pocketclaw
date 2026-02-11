@@ -1,6 +1,6 @@
 # PocketClaw — OpenClaw sur un Moto E2 (The Impossible Install)
 
-> "They said it couldn't be done. We did it anyway. 30 hacks later."
+> "They said it couldn't be done. We did it anyway. 33 hacks later."
 
 **Date :** 10-11 février 2026
 **Appareil :** Motorola Moto E2 (2015) — codename `surnia`/`otis`
@@ -22,7 +22,7 @@
 | git | Impossible à installer | Requis par npm | **Absent** |
 
 **Verdict officiel : IMPOSSIBLE.**
-**Verdict réel : 30 hacks plus tard, ça tourne.**
+**Verdict réel : 33 hacks plus tard, ça tourne.**
 
 ---
 
@@ -1321,6 +1321,72 @@ pm disable fr.neamar.kiss  # disable KISS, PocketClaw becomes default HOME
 
 ---
 
+### Hack #31 — Dashboard v6: Green Cyberpunk + RAM Breakdown
+
+**Problem:** Dashboard was red-themed, had CHAT and LOGS tabs nobody used, and didn't explain WHY RAM was high.
+
+**Solution:** Complete dashboard rewrite:
+1. **Green Matrix theme** — CRT scanlines, vignette, glow effects, scanning line animation
+2. **Boot animation** — 7 lines appear one by one with real data from /api/status, fades after 3s
+3. **RAM process breakdown** — reads `/proc/[pid]/status` + `/proc/[pid]/cmdline` for ALL processes, sorts by RSS, shows top 8 with proportional green bars
+4. **Orange bold lobster** (4vw, font-weight:bold, orange glow, animated claws)
+5. Removed CHAT and LOGS tabs — single page, all info visible
+6. Process names auto-cleaned: `com.android.*` → `*`, `com.motorola.*` → `moto.*`, etc.
+
+**Key insight:** Zero shell commands for process data. All read from /proc virtual filesystem.
+
+**Result:** User can see exactly which process eats RAM. Revealed launcher WebView as #1 consumer (216 MB > gateway 186 MB).
+
+**Status: OK — Dashboard live, process breakdown working**
+
+---
+
+### Hack #32 — Native APK: Kill the WebView (216 MB → 45 MB)
+
+**Problem:** The PocketClaw Launcher APK used Android WebView to display the dashboard. WebView = full Chrome rendering engine = **216 MB RSS** — more than the OpenClaw gateway itself (186 MB). Insane.
+
+**Solution:** Complete APK rewrite — zero WebView:
+1. Native Android `Activity` with `ScrollView` + `LinearLayout` + `TextView`
+2. All text in `Typeface.MONOSPACE` (terminal look)
+3. `HttpURLConnection` fetches `/api/status` every 3 seconds
+4. Manual JSON parsing (no Gson dependency)
+5. Shows: services (dots), RAM bar (█▒), top processes, swap, uptime
+6. Orange lobster ASCII art with animated claws
+7. Dark green background (#000A00), green text (#00FF41)
+
+**Build chain (same as before, no Android Studio):**
+```bash
+javac -source 1.8 -target 1.8 -classpath android.jar LauncherActivity.java
+d8 --min-api 23 --output build/ LauncherActivity.class
+aapt package -f -M AndroidManifest.xml -I android.jar -F build/unsigned.apk
+aapt add unsigned.apk classes.dex
+zipalign -f 4 unsigned.apk aligned.apk
+apksigner sign --ks debug.keystore aligned.apk
+```
+
+**Result:** 12.6 KB APK, 45 MB RSS (down from 216 MB). **170 MB saved** — biggest single RAM win of the project.
+
+**Status: OK — Native launcher deployed, WebView eliminated**
+
+---
+
+### Hack #33 — Extended Boot Debloat (+3 packages)
+
+**Problem:** After Hack #28's 51 packages, Chrome (45 MB), defcontainer (35 MB), and Qualcomm RIL tunnel (35 MB) were still running.
+
+**Solution:** Added to boot-debloat.sh:
+- `com.android.chrome` — full browser, no reason to run headless
+- `com.android.defcontainer` — package installer helper (re-enable temporarily for APK installs)
+- `com.qualcomm.qcrilmsgtunnel` — RIL message tunnel, not needed for WiFi
+
+**Gotcha:** Disabling `defcontainer` breaks `adb install`. Must `pm enable` before installing APKs, then `pm disable` after. Added to boot-debloat.sh with a comment.
+
+**Result:** 54+ packages disabled total. ~100 MB additional savings.
+
+**Status: OK — 3 new packages in debloat list, persists across reboot**
+
+---
+
 *"On m'a dit que c'était impossible, alors je l'ai fait." — Probablement pas Einstein, mais on s'en fout.*
 
-*Total : ~6 heures du premier `pkg install` au dashboard sur l'ecran d'accueil. 30 hacks. 0 EUR de hardware. Un Moto E2 de 2015 qui fait tourner un agent IA autonome en 2026 avec son propre dashboard CRT et un APK launcher de 8.5 KB.*
+*Total : ~8 heures du premier `pkg install` au dashboard natif sur l'écran d'accueil. 33 hacks. 0 EUR de hardware. Un Moto E2 de 2015 qui fait tourner un agent IA autonome en 2026 avec dashboard CRT green, breakdown RAM par process, et un APK natif de 12.6 KB qui consomme 45 MB au lieu de 216 MB.*

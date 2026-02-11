@@ -109,6 +109,9 @@ pm disable com.motorola.audioeffects 2>/dev/null
 pm disable com.motorola.actions 2>/dev/null
 pm disable com.motorola.wappushsi 2>/dev/null
 pm disable com.lmi.motorola.rescuesecurity 2>/dev/null
+pm disable com.android.chrome 2>/dev/null
+pm disable com.android.defcontainer 2>/dev/null
+pm disable com.qualcomm.qcrilmsgtunnel 2>/dev/null
 pm disable fr.neamar.kiss 2>/dev/null
 echo BOOT_DEBLOAT_DONE
 ' | $RUNAS 2>/dev/null | grep -E "DONE|new state"
