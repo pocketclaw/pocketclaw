@@ -1,572 +1,398 @@
-# PocketClaw
+<div align="center">
 
-### Running a modern AI agent on a $0 phone from 2015. 1GB RAM. Android 6. It works.
+```
+ ██████╗  ██████╗  ██████╗██╗  ██╗███████╗████████╗ ██████╗██╗      █████╗ ██╗    ██╗
+ ██╔══██╗██╔═══██╗██╔════╝██║ ██╔╝██╔════╝╚══██╔══╝██╔════╝██║     ██╔══██╗██║    ██║
+ ██████╔╝██║   ██║██║     █████╔╝ █████╗     ██║   ██║     ██║     ███████║██║ █╗ ██║
+ ██╔═══╝ ██║   ██║██║     ██╔═██╗ ██╔══╝     ██║   ██║     ██║     ██╔══██║██║███╗██║
+ ██║     ╚██████╔╝╚██████╗██║  ██╗███████╗   ██║   ╚██████╗███████╗██║  ██║╚███╔███╔╝
+ ╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝╚══════╝   ╚═╝    ╚═════╝╚══════╝╚═╝  ╚═╝ ╚══╝╚══╝
+```
 
-Turn a retired Android phone into a self-hosted AI assistant accessible via Telegram, powered by [OpenClaw](https://openclaw.ai) and the free Kimi API.
+**A modern AI agent running on a $0 phone from 2015.**<br>
+**1GB RAM. Android 6. Snapdragon 410. It works.**
 
-This was built and tested on a **Moto E2 with 1GB of RAM** — the absolute bottom of the barrel. If it runs here, it'll run on anything you have in a drawer.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Android 5+](https://img.shields.io/badge/Android-5%2B-green.svg)](https://www.android.com)
+[![OpenClaw](https://img.shields.io/badge/OpenClaw-2026.2.9-blue.svg)](https://openclaw.ai)
+[![Kimi K2.5](https://img.shields.io/badge/Kimi_K2.5-262K_context-purple.svg)](https://kimi.com)
+[![Telegram Bot](https://img.shields.io/badge/Telegram-Bot_API-26A5E4.svg)](https://core.telegram.org/bots)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
+
+---
+
+**They said it couldn't be done. 17 hacks later, it's running.**
+
+[Setup Guide](#-setup-guide) · [The 17 Hacks](HACKS.md) · [Troubleshooting](#-troubleshooting) · [Contributing](CONTRIBUTING.md)
+
+</div>
+
+---
+
+## The Pitch
+
+You have an old phone in a drawer. It's worthless. Nobody wants it.
+
+We turned it into a **self-hosted AI assistant** that runs 24/7, answers on Telegram, uses a 262K context window, costs $0/month, and survives reboots on its own.
+
+No cloud server. No subscription. No root required. Just a mass of hacks and stubborness.
+
+```
+You:     "hey, what's the weather like?"
+Bot:     "I'm running on a Moto E2 from 2015 with 1GB of RAM.
+          I have no idea what the weather is, but I'm impressed
+          I can even answer you right now."
+```
 
 ## What You Get
 
-- A Telegram bot (`@yourbot`) running 24/7 on an old phone
-- Kimi K2.5 model (262K context window) - **free tier**
-- No cloud server needed, no monthly costs
-- Accessible from anywhere via Telegram
+- **A Telegram bot** running 24/7 on a phone that belongs in a museum
+- **Kimi K2.5** — 262K context window, free tier, zero cost
+- **Fully autonomous** — auto-restarts on boot, works on any WiFi
+- **17 documented hacks** — every impossible problem we hit, and how we solved it
 
-## Hardware
+## The Hardware
 
-| Component | Details |
-|-----------|---------|
-| Phone | Moto E2 4G LTE (XT1524), ~2015 |
-| SoC | Snapdragon 410 (ARM Cortex-A53) |
-| RAM | **1 GB** |
-| Android | 6.0 Marshmallow |
-| Kernel | 3.10.49 armv7l |
+This was stress-tested on the **absolute worst-case scenario**:
 
-**Any Android 5+ phone should work.** This guide was stress-tested on the worst-case scenario: 1GB RAM, a 2015 budget phone, Android 6. If your phone is newer or has more RAM, you'll have an easier time. The gateway just boots faster and you can raise the V8 heap limit.
+| | Spec | Required | Actual | Gap |
+|---|---|---|---|---|
+| **RAM** | 3 GB | 1 GB | **3x under** |
+| **Android** | 10+ | 6.0 | **4 versions behind** |
+| **CPU** | ARM64 | ARM32 | **Wrong architecture** |
+| **Node.js** | v22 | v12 max (native) | **10 major versions** |
+
+If it runs on a Moto E2 from 2015, **it runs on anything you own.**
+
+> Got a phone from 2018+? You'll have a *much* easier time. The guide still applies, just with fewer hacks needed.
 
 ## Architecture
 
 ```
-[Telegram] <---> [Kimi API (api.kimi.com)]
-     ^                    ^
-     |                    |
-     +--- [OpenClaw Gateway] ---+
-              |
-         [proot Ubuntu]
-              |
-         [Termux]
-              |
-         [Android Phone]
+┌─────────────┐         ┌─────────────────┐
+│  Telegram    │◄───────►│  Kimi API       │
+│  (you)       │         │  (free, 262K)   │
+└──────┬───────┘         └────────┬────────┘
+       │                          │
+       └──────────┬───────────────┘
+                  │
+        ┌─────────▼──────────┐
+        │  OpenClaw Gateway  │
+        │  (port 9000)       │
+        ├────────────────────┤
+        │  proot Ubuntu      │
+        │  Node.js 22        │
+        ├────────────────────┤
+        │  Termux            │
+        ├────────────────────┤
+        │  Android Phone     │
+        │  (in a drawer)     │
+        └────────────────────┘
 ```
 
-OpenClaw runs inside a proot Ubuntu environment within Termux. It connects to Telegram via long-polling and forwards messages to the Kimi API for inference.
+All connections are **outbound**. The phone calls Telegram and Kimi — they never call back. This means: any WiFi works, any hotspot works, no port forwarding, no dynamic DNS. Plug it in and forget about it.
 
 ---
 
-## Step-by-Step Setup
+## 🚀 Setup Guide
 
-### 1. Install Termux
+### Prerequisites
 
-For Android 5-6, you need the legacy `apt-android-5` variant:
+- An Android 5+ phone (any brand, any condition)
+- WiFi connection
+- 10 minutes of patience (30 min on 1GB RAM devices)
 
-- Download Termux **v0.119.0-beta.3** (apt-android-5) from [F-Droid archive](https://f-droid.org/packages/com.termux/) or [GitHub Releases](https://github.com/termux/termux-app/releases)
-- For Android 7+: use the latest Termux from F-Droid
+### Step 1 — Install Termux
 
-> **Do NOT install from Google Play** - the Play Store version is deprecated and broken.
+| Android Version | What to Install |
+|---|---|
+| 5-6 | Termux **v0.119.0-beta.3** `apt-android-5` from [GitHub Releases](https://github.com/termux/termux-app/releases) |
+| 7+ | Latest Termux from [F-Droid](https://f-droid.org/packages/com.termux/) |
 
-### 2. Set Up Termux Base Packages
+> **Do NOT install from Google Play** — the Play Store version is deprecated.
+
+### Step 2 — Base packages
 
 ```bash
 pkg update -y
 pkg install -y proot-distro openssh
 ```
 
-### 3. Install Ubuntu via proot-distro
+### Step 3 — Install Ubuntu
 
 ```bash
 proot-distro install ubuntu
 ```
 
-This installs Ubuntu (25.10 at time of writing) in:
-```
-$PREFIX/var/lib/proot-distro/installed-rootfs/ubuntu
-```
-
-### 4. Enter Ubuntu and Install Node.js
+### Step 4 — Install Node.js
 
 ```bash
 proot-distro login ubuntu
 ```
 
 Inside Ubuntu:
-
 ```bash
 apt update && apt install -y curl ca-certificates
 curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
 apt install -y nodejs
-node -v   # Should show v22.x
+node -v   # v22.x
+exit
 ```
 
-### 5. Install OpenClaw
+### Step 5 — Install OpenClaw
 
 ```bash
+proot-distro login ubuntu
 npm install -g openclaw
-openclaw --version   # 2026.2.9 or later
+exit
 ```
 
-Exit the proot shell (`exit`) back to Termux.
+### Step 6 — Deploy PocketClaw files
 
-### 6. Create the Network Bypass Script
-
-OpenClaw calls `os.networkInterfaces()` which crashes under proot (no `/proc/net` access). We bypass it:
+Clone this repo on your PC and push files to the phone:
 
 ```bash
+# On your PC
+git clone https://github.com/MonteiroRobin/pocketclaw.git
+cd pocketclaw
+
+# Push scripts to the phone
+adb push scripts/hijack.js /sdcard/Download/
+adb push scripts/start-openclaw.sh /sdcard/Download/
+adb push scripts/restart-gw.sh /sdcard/Download/
+adb push scripts/run-proot.sh /sdcard/Download/
+adb push scripts/boot-openclaw.sh /sdcard/Download/
+adb push config/openclaw.example.json /sdcard/Download/
+adb push config/env.example /sdcard/Download/
+```
+
+Then in Termux:
+```bash
+PREFIX=/data/data/com.termux/files/usr
 ROOTFS=$PREFIX/var/lib/proot-distro/installed-rootfs/ubuntu
-cat > "$ROOTFS/root/hijack.js" << 'EOF'
-const os = require("os"); os.networkInterfaces = () => ({});
-EOF
+
+# Install scripts
+cp /sdcard/Download/start-openclaw.sh $PREFIX/bin/start-openclaw
+cp /sdcard/Download/restart-gw.sh $PREFIX/bin/restart-gw
+cp /sdcard/Download/run-proot.sh $PREFIX/bin/run-proot
+chmod +x $PREFIX/bin/start-openclaw $PREFIX/bin/restart-gw $PREFIX/bin/run-proot
+
+# Install proot files
+cp /sdcard/Download/hijack.js $ROOTFS/root/hijack.js
+mkdir -p $ROOTFS/root/.openclaw
+cp /sdcard/Download/openclaw.example.json $ROOTFS/root/.openclaw/openclaw.json
+
+# Set up IPv6 DNS
+printf "nameserver 2001:4860:4860::8888\nnameserver 2001:4860:4860::8844\n" > $ROOTFS/etc/resolv.conf
 ```
 
-### 7. Set Up DNS (IPv6)
+### Step 7 — Get your API keys
 
-Android proot may have broken IPv4 routing. Use IPv6 DNS for reliability:
-
-```bash
-cat > "$ROOTFS/etc/resolv.conf" << 'EOF'
-nameserver 2001:4860:4860::8888
-nameserver 2001:4860:4860::8844
-EOF
-```
-
-### 8. Get Your API Keys
-
-#### Kimi API Key (Free)
-
+**Kimi API Key (free):**
 1. Go to [kimi.com/code/console](https://www.kimi.com/code/console)
-2. Sign up / log in
-3. Create an API key (starts with `sk-kimi-...`)
+2. Create an API key (`sk-kimi-...`)
 
-#### Telegram Bot Token
+**Telegram Bot Token:**
+1. Message [@BotFather](https://t.me/BotFather) on Telegram
+2. `/newbot` → follow prompts → copy the token
 
-1. Open Telegram, message [@BotFather](https://t.me/BotFather)
-2. Send `/newbot`, follow the prompts
-3. Copy the bot token (format: `1234567890:AAH...`)
-
-### 9. Create the Environment File
+### Step 8 — Configure
 
 ```bash
-cat > "$ROOTFS/root/.openclaw/env" << EOF
-KIMI_API_KEY=sk-kimi-YOUR_KEY_HERE
-MOONSHOT_API_KEY=sk-kimi-YOUR_KEY_HERE
-TELEGRAM_BOT_TOKEN=YOUR_BOT_TOKEN_HERE
+# Create the env file with your real keys
+cat > $ROOTFS/root/.openclaw/env << EOF
+KIMI_API_KEY=sk-kimi-YOUR_ACTUAL_KEY
+MOONSHOT_API_KEY=sk-kimi-YOUR_ACTUAL_KEY
+TELEGRAM_BOT_TOKEN=1234567890:YOUR_ACTUAL_TOKEN
 EOF
-chmod 600 "$ROOTFS/root/.openclaw/env"
+chmod 600 $ROOTFS/root/.openclaw/env
 ```
 
-> Both `KIMI_API_KEY` and `MOONSHOT_API_KEY` should be set to the same Kimi key. OpenClaw checks both depending on the provider.
-
-### 10. Create the OpenClaw Configuration
-
-```bash
-mkdir -p "$ROOTFS/root/.openclaw"
-cat > "$ROOTFS/root/.openclaw/openclaw.json" << 'JSONEOF'
-{
-  "models": {
-    "providers": {
-      "kimi-coding": {
-        "baseUrl": "https://api.kimi.com/coding/v1",
-        "apiKey": "${KIMI_API_KEY}",
-        "api": "openai-completions",
-        "headers": {
-          "User-Agent": "claude-code/1.0"
-        },
-        "models": [
-          {
-            "id": "kimi-for-coding",
-            "name": "Kimi For Coding",
-            "reasoning": false,
-            "input": ["text", "image"],
-            "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
-            "contextWindow": 262144,
-            "maxTokens": 8192,
-            "headers": {
-              "User-Agent": "claude-code/1.0"
-            }
-          }
-        ]
-      }
-    }
-  },
-  "agents": {
-    "defaults": {
-      "model": {
-        "primary": "kimi-coding/kimi-for-coding"
-      },
-      "maxConcurrent": 4,
-      "subagents": {
-        "maxConcurrent": 8
-      }
-    }
-  },
-  "channels": {
-    "telegram": {
-      "enabled": true,
-      "dmPolicy": "open",
-      "botToken": "${TELEGRAM_BOT_TOKEN}",
-      "allowFrom": ["*"],
-      "groupPolicy": "allowlist",
-      "streamMode": "partial",
-      "network": {
-        "autoSelectFamily": true
-      }
-    }
-  },
-  "gateway": {
-    "port": 9000,
-    "mode": "local",
-    "auth": {
-      "mode": "token",
-      "token": "change-me-to-a-random-string"
-    }
-  },
-  "plugins": {
-    "entries": {
-      "telegram": {
-        "enabled": true
-      }
-    }
-  }
-}
-JSONEOF
-```
-
-### Critical Configuration Notes
-
-| Setting | Why |
-|---------|-----|
-| `headers: {"User-Agent": "claude-code/1.0"}` | **Required.** The Kimi Coding API rejects requests without a recognized coding agent User-Agent. Set at both provider AND model level. |
-| `plugins.entries.telegram.enabled: true` | **Required.** Without this, the Telegram plugin won't load even if `channels.telegram.enabled` is true. |
-| `network.autoSelectFamily: true` | Tells Node.js to try both IPv4 and IPv6 when connecting. |
-| `reasoning: false` | Prevents the model from using extended thinking mode. |
-| `api: "openai-completions"` | Kimi uses the OpenAI-compatible completions API. |
-
-### 11. Create Helper Scripts
-
-#### `$PREFIX/bin/run-proot` — Run commands inside proot
-
-```bash
-cat > "$PREFIX/bin/run-proot" << 'EOF'
-#!/data/data/com.termux/files/usr/bin/bash
-PREFIX=/data/data/com.termux/files/usr
-ROOTFS=$PREFIX/var/lib/proot-distro/installed-rootfs/ubuntu
-unset LD_PRELOAD
-export PROOT_TMP_DIR=$PREFIX/tmp
-
-if [ -f "$ROOTFS/root/.openclaw/env" ]; then
-  source "$ROOTFS/root/.openclaw/env"
-  export MOONSHOT_API_KEY
-  export KIMI_API_KEY
-fi
-
-proot \
-  --link2symlink \
-  --kill-on-exit \
-  --root-id \
-  --rootfs=$ROOTFS \
-  --bind=/dev \
-  --bind=/proc \
-  --bind=/sys \
-  --bind=$PREFIX/tmp:/tmp \
-  --bind=/storage/emulated/0:/sdcard \
-  --cwd=/root \
-  /bin/bash -c "export PATH=/data/data/com.termux/files/usr/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin && export HOME=/root && export NODE_OPTIONS='-r /root/hijack.js' && export MOONSHOT_API_KEY='$MOONSHOT_API_KEY' && export KIMI_API_KEY='$KIMI_API_KEY' && $*"
-EOF
-chmod +x "$PREFIX/bin/run-proot"
-```
-
-#### `$PREFIX/bin/start-openclaw` — Start the gateway
-
-```bash
-cat > "$PREFIX/bin/start-openclaw" << 'EOF'
-#!/data/data/com.termux/files/usr/bin/bash
-PREFIX=/data/data/com.termux/files/usr
-ROOTFS=$PREFIX/var/lib/proot-distro/installed-rootfs/ubuntu
-unset LD_PRELOAD
-export PROOT_TMP_DIR=$PREFIX/tmp
-
-source "$ROOTFS/root/.openclaw/env" 2>/dev/null
-export MOONSHOT_API_KEY
-export KIMI_API_KEY
-export TELEGRAM_BOT_TOKEN
-
-termux-wake-lock 2>/dev/null
-
-# Free RAM: kill heavy Android processes (do NOT kill com.google.android.gms)
-am force-stop com.google.android.inputmethod.latin 2>/dev/null
-am force-stop android.process.media 2>/dev/null
-am force-stop android.process.acore 2>/dev/null
-
-echo "Starting OpenClaw gateway..."
-echo "Port: 9000"
-
-proot \
-  --link2symlink \
-  --kill-on-exit \
-  --root-id \
-  --rootfs=$ROOTFS \
-  --bind=/dev \
-  --bind=/proc \
-  --bind=/sys \
-  --bind=$PREFIX/tmp:/tmp \
-  --bind=/storage/emulated/0:/sdcard \
-  --cwd=/root \
-  /bin/bash -c "export PATH=/data/data/com.termux/files/usr/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
-    && export HOME=/root \
-    && export NODE_OPTIONS='-r /root/hijack.js --max-old-space-size=384' \
-    && export MOONSHOT_API_KEY='$MOONSHOT_API_KEY' \
-    && export KIMI_API_KEY='$KIMI_API_KEY' \
-    && export TELEGRAM_BOT_TOKEN='$TELEGRAM_BOT_TOKEN' \
-    && export XDG_RUNTIME_DIR=/tmp \
-    && export DBUS_SESSION_BUS_ADDRESS=disabled: \
-    && openclaw gateway run --port 9000 --verbose 2>&1"
-EOF
-chmod +x "$PREFIX/bin/start-openclaw"
-```
-
-> **`--max-old-space-size=384`** is critical for 1GB RAM devices. It caps V8 heap to 384MB to prevent OOM kills.
-
-> **Do NOT kill `com.google.android.gms`** — it manages WiFi routing. Killing it permanently breaks IPv4 connectivity until reboot.
-
-#### `$PREFIX/bin/restart-gw` — Clean restart
-
-```bash
-cat > "$PREFIX/bin/restart-gw" << 'EOF'
-#!/data/data/com.termux/files/usr/bin/bash
-pkill -9 -f openclaw 2>/dev/null
-pkill -9 -f proot 2>/dev/null
-sleep 3
-
-ROOTFS=/data/data/com.termux/files/usr/var/lib/proot-distro/installed-rootfs/ubuntu
-rm -f "$ROOTFS/tmp/openclaw/"*.lock 2>/dev/null
-rm -f /data/data/com.termux/files/usr/tmp/openclaw-gateway.log
-
-remaining=$(ps | grep -E 'proot|openclaw' | grep -v grep | wc -l)
-echo "Remaining processes: $remaining"
-
-echo "Starting gateway..."
-nohup start-openclaw > /data/data/com.termux/files/usr/tmp/openclaw-gateway.log 2>&1 &
-echo "PID: $!"
-EOF
-chmod +x "$PREFIX/bin/restart-gw"
-```
-
-### 12. Set Up SSH Access (Optional, Recommended)
-
-Allows managing the phone from a PC:
-
-```bash
-# In Termux
-sshd
-```
-
-On your PC, copy your SSH key:
-```bash
-# Generate a key (if you don't have one)
-ssh-keygen -t ed25519 -f ~/.ssh/id_phone -N ""
-
-# Copy to phone
-adb push ~/.ssh/id_phone.pub /sdcard/Download/
-# Then in Termux:
-cat /sdcard/Download/id_phone.pub >> ~/.ssh/authorized_keys
-```
-
-Connect via ADB port forwarding:
-```bash
-adb forward tcp:8022 tcp:8022
-ssh -i ~/.ssh/id_phone -p 8022 localhost
-```
-
-Or over WiFi directly (no USB needed):
-```bash
-# Find phone's IP in Termux: ip addr show wlan0
-ssh -i ~/.ssh/id_phone -p 8022 192.168.x.x
-```
-
-### 13. Auto-Start on Boot (Standalone Mode)
-
-This is what lets you unplug the phone and leave it running as a headless server.
-
-#### Install Termux:Boot
-
-From a PC with ADB:
-```bash
-# Download
-curl -L -o termux-boot.apk "https://github.com/termux/termux-boot/releases/download/v0.8.1/termux-boot-app_v0.8.1+github.debug.apk"
-
-# Install
-adb install termux-boot.apk
-```
-
-Or download the APK directly on the phone from [GitHub Releases](https://github.com/termux/termux-boot/releases).
-
-> **Important:** Open the Termux:Boot app once after install. This activates the boot receiver. You only need to do this once.
-
-#### Create the boot script
-
-```bash
-mkdir -p ~/.termux/boot
-cat > ~/.termux/boot/start-openclaw.sh << 'EOF'
-#!/data/data/com.termux/files/usr/bin/bash
-# Wait for WiFi to connect
-sleep 15
-
-# Start SSH server
-sshd
-
-# Start the gateway
-nohup start-openclaw > /data/data/com.termux/files/usr/tmp/openclaw-gateway.log 2>&1 &
-
-echo "Boot complete: sshd + openclaw started"
-EOF
-chmod +x ~/.termux/boot/start-openclaw.sh
-```
-
-Now when the phone reboots (battery dies, power cycle, crash), everything restarts automatically: WiFi connects -> Termux:Boot fires -> sshd + gateway start -> bot is back online. Zero intervention.
-
-### 14. Launch!
-
-From Termux (or SSH):
+### Step 9 — Launch
 
 ```bash
 restart-gw
 ```
 
-Wait ~30-60 seconds for the gateway to boot (1GB RAM is slow).
+Wait 30-60 seconds. Then open Telegram and message your bot.
 
-### 15. Quick Test
+**If it replies, you're done.** 🎉
 
-Open Telegram. Send any message to your bot.
+### Step 10 — Auto-start on boot (optional)
 
-If it replies, **you're done.** The whole stack is working: Termux -> proot -> OpenClaw -> Telegram -> Kimi API -> response.
-
-If you get "Message ordering conflict", send `/new` first to reset the session.
-
-### 16. Unplug and Go
-
-You can now disconnect the phone from your PC. The bot is self-sufficient.
-
-**On any WiFi / hotspot:** The bot uses outbound connections only (long-polling to Telegram, API calls to Kimi). No port forwarding, no fixed IP needed. Connect the phone to any WiFi network or mobile hotspot and it just works.
-
-**Battery life:** With `termux-wake-lock` active and the screen off, expect roughly a full day on a 2000mAh battery. Plug it into any USB charger for permanent operation.
-
-**Take it with you:** The phone works on any internet connection. Home WiFi, hotel WiFi, phone hotspot on the train — as long as it has a network, the bot responds on Telegram.
-
-### 17. Check Logs
+Install [Termux:Boot](https://github.com/termux/termux-boot/releases) and set up auto-start:
 
 ```bash
-# Gateway stdout
-tail -f $PREFIX/tmp/openclaw-gateway.log
-
-# Internal structured logs
-tail -f $PREFIX/var/lib/proot-distro/installed-rootfs/ubuntu/tmp/openclaw/openclaw-$(date +%Y-%m-%d).log
+# Install via ADB from PC
+curl -L -o termux-boot.apk "https://github.com/termux/termux-boot/releases/download/v0.8.1/termux-boot-app_v0.8.1+github.debug.apk"
+adb install termux-boot.apk
+# Open the app ONCE on the phone to activate it
 ```
+
+```bash
+# In Termux: install boot script
+mkdir -p ~/.termux/boot
+cp /sdcard/Download/boot-openclaw.sh ~/.termux/boot/start-openclaw.sh
+chmod +x ~/.termux/boot/start-openclaw.sh
+```
+
+Now unplug the phone. Put it in a drawer. It restarts everything on its own after a reboot.
 
 ---
 
-## Troubleshooting
+## ⚙️ Configuration
 
-### Bot doesn't respond
+### Critical settings in `openclaw.json`
 
-1. Check the gateway is running: `ps | grep openclaw`
-2. Check logs for errors: `tail -20 $PREFIX/tmp/openclaw-gateway.log`
-3. Verify Telegram connectivity:
-   ```bash
-   run-proot 'node -e "fetch(\"https://api.telegram.org/botYOUR_TOKEN/getMe\").then(r=>r.json()).then(console.log)"'
-   ```
+| Setting | Why it matters |
+|---|---|
+| `User-Agent: claude-code/1.0` | **Required.** Kimi API blocks requests without a recognized coding agent header. Must be set at both provider AND model level. |
+| `plugins.entries.telegram.enabled: true` | **Required.** Without this, Telegram won't load even if `channels.telegram` is configured. |
+| `reasoning: false` | Prevents extended thinking mode that can cause empty responses. |
+| `network.autoSelectFamily: true` | Enables dual-stack IPv4/IPv6 for better connectivity. |
+| `--max-old-space-size=384` | Caps V8 heap to 384MB. Critical for 1GB RAM devices. |
 
-### "fetch failed" errors
+See [`config/openclaw.example.json`](config/openclaw.example.json) for the full working configuration.
 
-- Usually a network issue. Check WiFi is connected.
-- Reboot the phone if IPv4 routing is broken (common after killing GMS).
-- Verify DNS works: `run-proot 'node -e "fetch(\"https://api.kimi.com\").then(r=>console.log(r.status))"'`
+---
 
-### "403 Kimi For Coding is currently only available for Coding Agents"
+## 🔧 Troubleshooting
 
-The `User-Agent: claude-code/1.0` header is not being sent. Ensure it's set at **both** provider and model level in `openclaw.json`.
+<details>
+<summary><b>Bot doesn't respond</b></summary>
 
-### "Message ordering conflict"
+1. Check processes: `ps | grep openclaw`
+2. Check logs: `tail -20 $PREFIX/tmp/openclaw-gateway.log`
+3. Test Telegram: `run-proot 'node -e "fetch(\"https://api.telegram.org/botTOKEN/getMe\").then(r=>r.json()).then(console.log)"'`
+</details>
 
-Send `/new` to the bot to start a fresh session. This happens after gateway restarts when old Telegram updates are still queued.
+<details>
+<summary><b>"fetch failed" errors</b></summary>
 
-### Gateway won't start / "already running"
+Network issue. Check WiFi. If IPv4 routing is broken, reboot the phone.
+**Never kill `com.google.android.gms`** — it manages WiFi routing on Android.
+</details>
 
-Lock files may be stale. Clean them:
+<details>
+<summary><b>"403 Kimi For Coding is currently only available for Coding Agents"</b></summary>
+
+The `User-Agent: claude-code/1.0` header is missing. Set it at **both** provider and model level in `openclaw.json`.
+</details>
+
+<details>
+<summary><b>"Message ordering conflict"</b></summary>
+
+Send `/new` to the bot. This resets the session after gateway restarts.
+</details>
+
+<details>
+<summary><b>Gateway won't start / "already running"</b></summary>
+
+Stale lock files. Use `restart-gw` (handles cleanup automatically) or manually:
 ```bash
-rm -f $PREFIX/var/lib/proot-distro/installed-rootfs/ubuntu/tmp/openclaw/*.lock
+rm -f $ROOTFS/tmp/openclaw/*.lock
 ```
-Or just use `restart-gw` which handles this automatically.
+</details>
 
-### Out of memory / phone freezes
+<details>
+<summary><b>Out of memory / phone freezes</b></summary>
 
-- Ensure `--max-old-space-size=384` is set in NODE_OPTIONS
-- Kill unnecessary Android apps: `am force-stop <package>`
+- Verify `--max-old-space-size=384` is in NODE_OPTIONS
+- Kill unnecessary apps: `am force-stop <package>`
 - **Never kill** `com.google.android.gms` (breaks WiFi)
+</details>
 
-### Can't kill gateway processes from ADB shell
+<details>
+<summary><b>Can't kill processes from ADB shell</b></summary>
 
-ADB shell runs as UID `shell` and can't signal Termux processes (different UID). Kill from Termux or SSH instead.
-
-### nohup log is empty
-
-Node.js stdout is fully buffered when piped to a file. Check the internal logs at `/tmp/openclaw/openclaw-*.log` instead.
-
----
-
-## Gotchas We Discovered
-
-| Gotcha | Details |
-|--------|---------|
-| **Kimi Coding != Moonshot API** | Keys from `kimi.com/code/console` only work with `api.kimi.com/coding/v1`, NOT `api.moonshot.cn/v1`. They are separate services. |
-| **User-Agent gating** | The Kimi Coding API checks `User-Agent` and blocks requests not from recognized coding agents. `claude-code/1.0` works. |
-| **Two-flag Telegram enable** | Telegram needs BOTH `channels.telegram.enabled: true` AND `plugins.entries.telegram.enabled: true`. Missing either = no bot. |
-| **`openclaw doctor --fix` resets plugins** | Running `doctor --fix` may set `plugins.entries.telegram.enabled: false`. Always check after running it. |
-| **`openclaw channels add` is broken** | The CLI command doesn't work for Telegram. Configure directly in `openclaw.json`. |
-| **GMS manages WiFi routing** | Killing Google Play Services (`com.google.android.gms`) permanently removes the IPv4 default route until reboot. |
-| **proot has no real network stack** | `os.networkInterfaces()` crashes. The `hijack.js` workaround returns `{}`. |
-| **IPv6 DNS is more reliable** | Android proot often has broken IPv4 routing. IPv6 DNS (`2001:4860:4860::8888`) works reliably. |
-| **Lock files block restart** | OpenClaw creates `/tmp/openclaw/*.lock` files that persist after kill and prevent restart. |
+ADB runs as UID `shell`, can't signal Termux processes. Kill from Termux or SSH instead.
+</details>
 
 ---
 
-## File Layout on Phone
+## 📂 Project Structure
 
 ```
-$PREFIX = /data/data/com.termux/files/usr
-$ROOTFS = $PREFIX/var/lib/proot-distro/installed-rootfs/ubuntu
+pocketclaw/
+├── README.md                      # You are here
+├── HACKS.md                       # The 17 hacks — the full war story
+├── CONTRIBUTING.md                 # How to contribute
+├── LICENSE                         # MIT
+├── config/
+│   ├── openclaw.example.json      # Working config (copy & fill in keys)
+│   └── env.example                # API key template
+└── scripts/
+    ├── start-openclaw.sh          # Gateway launcher
+    ├── restart-gw.sh              # Clean kill + restart
+    ├── run-proot.sh               # Run commands inside proot
+    ├── boot-openclaw.sh           # Termux:Boot auto-start
+    └── hijack.js                  # os.networkInterfaces() bypass
+```
 
+### On the phone
+
+```
 $PREFIX/bin/
-  ├── start-openclaw     # Main launcher script
-  ├── restart-gw         # Clean restart script
-  └── run-proot          # Run commands inside proot
+  ├── start-openclaw       # → scripts/start-openclaw.sh
+  ├── restart-gw           # → scripts/restart-gw.sh
+  └── run-proot            # → scripts/run-proot.sh
 
 $ROOTFS/root/
-  ├── hijack.js          # os.networkInterfaces() bypass
+  ├── hijack.js            # → scripts/hijack.js
   └── .openclaw/
-      ├── openclaw.json  # Main configuration
-      └── env            # API keys (chmod 600)
+      ├── openclaw.json    # → config/openclaw.example.json (with real keys)
+      └── env              # → config/env.example (with real keys)
 
-$ROOTFS/etc/
-  └── resolv.conf        # IPv6 DNS servers
-
-$PREFIX/tmp/
-  └── openclaw-gateway.log  # Gateway stdout log
-
-$ROOTFS/tmp/openclaw/
-  ├── openclaw-YYYY-MM-DD.log  # Internal structured logs
-  └── *.lock                    # Gateway lock files
+~/.termux/boot/
+  └── start-openclaw.sh   # → scripts/boot-openclaw.sh
 ```
+
+---
+
+## 🤝 The 17 Hacks
+
+Every single problem we hit — and the hack that fixed it. From proot crashes to User-Agent spoofing to discovering that killing Google Play Services permanently breaks WiFi.
+
+**[Read the full story →](HACKS.md)**
 
 ---
 
 ## Tested With
 
-- Moto E2 4G LTE (XT1524), Android 6.0, 1GB RAM
-- Termux v0.119.0-beta.3 (apt-android-5)
-- proot-distro with Ubuntu 25.10 (armhf)
-- Node.js 22.12.0
-- OpenClaw 2026.2.9
-- Kimi For Coding API (free tier, 262K context)
+| Component | Version |
+|---|---|
+| Phone | Moto E2 4G LTE (XT1524), 2015 |
+| Android | 6.0 Marshmallow |
+| RAM | 1 GB |
+| Termux | v0.119.0-beta.3 (apt-android-5) |
+| proot-distro | Ubuntu 25.10 (armhf) |
+| Node.js | 22.12.0 |
+| OpenClaw | 2026.2.9 |
+| Model | Kimi For Coding (K2.5, 262K context) |
+
+---
+
+## Contributing
+
+Got it running on a different phone? Found a better hack? Want to add support for another AI provider?
+
+**[See CONTRIBUTING.md →](CONTRIBUTING.md)**
 
 ---
 
 ## License
 
-MIT
+MIT — do whatever you want with it.
 
-## Credits
+---
 
-- [OpenClaw](https://openclaw.ai) - Open-source AI gateway
-- [Kimi / Moonshot AI](https://kimi.com) - Free LLM API
-- [Termux](https://termux.dev) - Terminal emulator for Android
-- [proot-distro](https://github.com/termux/proot-distro) - Linux distribution installer for Termux
+<div align="center">
+
+**Built with stubbornness on a mass of impossible constraints.**
+
+*A phone from 2015. 1GB of RAM. 17 hacks. $0 spent.*<br>
+*If it can run AI, anything can.*
+
+**[Star this repo](https://github.com/MonteiroRobin/pocketclaw)** if you think old phones deserve a second life.
+
+</div>
