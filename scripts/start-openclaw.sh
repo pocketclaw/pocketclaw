@@ -5,11 +5,8 @@ ROOTFS=$PREFIX/var/lib/proot-distro/installed-rootfs/ubuntu
 unset LD_PRELOAD
 export PROOT_TMP_DIR=$PREFIX/tmp
 
-source "$ROOTFS/root/.openclaw/env" 2>/dev/null
-export MOONSHOT_API_KEY
-export KIMI_API_KEY
-export TELEGRAM_BOT_TOKEN
-export OPENAI_API_KEY
+# API keys are loaded inside proot from /root/.openclaw/env
+# NOT passed via command line (visible in ps output = security risk)
 
 termux-wake-lock 2>/dev/null
 
@@ -18,8 +15,11 @@ termux-wake-lock 2>/dev/null
 am force-stop com.google.android.inputmethod.latin 2>/dev/null
 am force-stop android.process.media 2>/dev/null
 am force-stop android.process.acore 2>/dev/null
-am force-stop com.android.mms 2>/dev/null
-am force-stop com.google.android.setupwizard 2>/dev/null
+am force-stop com.termux.boot 2>/dev/null
+am force-stop com.android.providers.calendar 2>/dev/null
+am force-stop com.android.providers.contacts 2>/dev/null
+am force-stop com.android.providers.media 2>/dev/null
+am force-stop com.google.android.webview 2>/dev/null
 # Kill GMS sub-processes that don't manage connectivity
 am kill com.google.android.gms.unstable 2>/dev/null
 am kill com.google.android.gms:snet 2>/dev/null
@@ -49,10 +49,8 @@ while true; do
     /bin/bash -c "export PATH=/data/data/com.termux/files/usr/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
       && export HOME=/root \
       && export NODE_OPTIONS='-r /root/hijack.js --expose-gc --max-old-space-size=192' \
-      && export MOONSHOT_API_KEY='$MOONSHOT_API_KEY' \
-      && export KIMI_API_KEY='$KIMI_API_KEY' \
-      && export TELEGRAM_BOT_TOKEN='$TELEGRAM_BOT_TOKEN' \
-      && export OPENAI_API_KEY='$OPENAI_API_KEY' \
+      && . /root/.openclaw/env \
+      && export MOONSHOT_API_KEY KIMI_API_KEY TELEGRAM_BOT_TOKEN OPENAI_API_KEY \
       && export XDG_RUNTIME_DIR=/tmp \
       && export DBUS_SESSION_BUS_ADDRESS=disabled: \
       && openclaw gateway run --port 9000 --verbose 2>&1"
