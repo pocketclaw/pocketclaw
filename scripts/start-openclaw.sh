@@ -10,21 +10,14 @@ export PROOT_TMP_DIR=$PREFIX/tmp
 
 termux-wake-lock 2>/dev/null
 
-# Free RAM: kill non-essential processes
-# NEVER kill com.google.android.gms or com.google.android.gms.persistent (WiFi depends on them)
-am force-stop com.google.android.inputmethod.latin 2>/dev/null
-am force-stop android.process.media 2>/dev/null
-am force-stop android.process.acore 2>/dev/null
-am force-stop com.termux.boot 2>/dev/null
-am force-stop com.android.providers.calendar 2>/dev/null
-am force-stop com.android.providers.contacts 2>/dev/null
-am force-stop com.android.providers.media 2>/dev/null
-am force-stop com.google.android.webview 2>/dev/null
-# Kill GMS sub-processes that don't manage connectivity
-am kill com.google.android.gms.unstable 2>/dev/null
-am kill com.google.android.gms:snet 2>/dev/null
-am kill com.google.android.gms.ui 2>/dev/null
-am kill com.google.process.gapps 2>/dev/null
+# NOTE: am force-stop does NOT work from Termux (uid 10001 lacks FORCE_STOP_PACKAGES).
+# Process kills only work from ADB shell (uid 2000). Run manually when USB connected:
+#   adb shell am force-stop com.google.android.gms       # -270 MB (static IP keeps route)
+#   adb shell am force-stop com.termux.boot               # -90 MB
+#   adb shell am force-stop com.android.providers.contacts # -43 MB
+#   adb shell am force-stop com.android.providers.media    # -41 MB
+#   adb shell am force-stop com.google.android.webview     # -41 MB
+# The 28 pm-uninstalled packages are the real permanent gain (persist across reboots).
 
 echo "Starting OpenClaw gateway with watchdog..."
 echo "Port: 9000"

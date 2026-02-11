@@ -39,4 +39,7 @@ if ! timeout 10 bash -c 'echo > /dev/tcp/127.0.0.1/9000' 2>/dev/null; then
   exit 0
 fi
 
+# NOTE: GMS kill doesn't work from Termux cron (uid 10001 lacks FORCE_STOP_PACKAGES).
+# GMS can only be killed from ADB shell (uid 2000). See start-openclaw.sh for manual commands.
+
 # All good — no output to keep cron quiet
