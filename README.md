@@ -51,7 +51,7 @@ Bot:     "I'm running on a Moto E2 from 2015 with 1GB of RAM.
 - **Voice messages** — send a voice note, get a text reply (via OpenAI Whisper)
 - **Fully autonomous** — watchdog + health checks auto-restart on crash or freeze, survives reboots
 - **`pocketclaw` CLI** — `start`, `stop`, `restart`, `status`, `logs`, `monitor` from one command
-- **RAM-optimized** — runs in 350 MB V8 heap with periodic GC and ESM stubs on hardware that has 1 GB total
+- **RAM-optimized** — 178 MB RSS with V8 heap 192 MB, periodic GC, and ESM stubs on hardware that has 1 GB total
 - **20 documented hacks** — every impossible problem we hit, and how we solved it
 
 ## The Hardware
@@ -105,10 +105,10 @@ Running a modern AI gateway on 1 GB RAM requires aggressive optimization. Here's
 
 Every version squeezed more out of the same hardware:
 
-| | **v0** Initial | **v1** Hacks | **v2** Optim | **v3** Stubs |
+| | **v0** Initial | **v1** Hacks | **v2** Optim | **v3** Stubs+Heap |
 |---|---|---|---|---|
-| **Gateway RSS** | ~224 MB | ~224 MB | 233 MB | **183 MB** |
-| **V8 heap** | 384 MB | 384 MB | 384 MB | **350 MB** |
+| **Gateway RSS** | ~224 MB | ~224 MB | 233 MB | **~178 MB** |
+| **V8 heap** | 384 MB | 384 MB | 384 MB | **192 MB** |
 | **Periodic GC** | - | - | 60s, ~11 MB/cycle | 60s, ~11 MB/cycle |
 | **ESM stubs** | - | - | - | **9 packages stubbed** |
 | **node_modules** | 413 MB | 413 MB | 413 MB | **151 MB** |
@@ -116,22 +116,30 @@ Every version squeezed more out of the same hardware:
 | **Crash recovery** | manual | watchdog loop | + healthcheck cron | + healthcheck cron |
 | **Monitoring** | - | - | CSV every 5 min | CSV every 5 min |
 
-**Total gains v0 → v3:** -41 MB RSS (-18%), +371 MB disk, -262 MB node_modules (-63%), fully autonomous.
+**Total gains v0 → v3:** -46 MB RSS (-21%), +371 MB disk, -262 MB node_modules (-63%), heap 384→192 (-50%), fully autonomous.
 
 ### Memory budget
 
 | Component | RAM | Notes |
 |---|---|---|
 | Android + GMS | ~430 MB | Not rootable — Google Play Services can't be frozen |
-| OpenClaw gateway | ~183 MB | Telegram only, ESM stubs for unused channels/providers |
-| V8 heap headroom | ~167 MB | Boot peak needs ~340 MB, then settles to ~183 MB |
-| **Total needed** | **~780 MB** | On 920 MB total — 140 MB margin |
+| OpenClaw gateway | ~178 MB | Telegram only, ESM stubs, heap 192 MB |
+| **Total needed** | **~608 MB** | On 920 MB total — **312 MB margin** |
+
+**With root (freeze GMS):**
+
+| Component | RAM | Notes |
+|---|---|---|
+| Android (no GMS) | ~60 MB | After freezing Google Play Services |
+| Termux + proot | ~60 MB | Shell + Linux userspace emulation |
+| OpenClaw gateway | ~178 MB | Same config |
+| **Total needed** | **~298 MB** | On 920 MB total — **622 MB margin** |
 
 ### What we tuned
 
 | Optimization | Impact |
 |---|---|
-| `--max-old-space-size=350` | Caps V8 heap. 256/320 OOM at boot, 350 is the minimum with stubs. |
+| `--max-old-space-size=192` | Caps V8 heap. Binary search found OOM at 96, min 128, prod safe at 192. RSS ~178 MB regardless. |
 | `--expose-gc` + periodic GC | Explicit `global.gc()` every 60s frees ~10 MB per cycle |
 | ESM stub packages | Replace 9 unused SDKs (Slack, Discord, LINE, WhatsApp, Playwright, AWS Bedrock, Google Gemini) with empty ESM exports. Saves ~40 MB RSS and 262 MB disk. |
 | Kill GMS sub-processes at startup | Frees ~50-100 MB temporarily (they respawn slowly) |
@@ -163,7 +171,7 @@ $ pocketclaw status
 Gateway:  RUNNING (PID 12345)
 Uptime:   up 3 days, 2:15
 RAM:      370MB available / 898MB total
-Gateway:  183MB RSS
+Gateway:  178MB RSS
 Swap:     45MB used (swappiness=100)
 Disk:     471MB free
 Battery:  87%, 31.2°C
@@ -390,7 +398,7 @@ OpenClaw works with **30+ providers** out of the box. Just change the provider, 
 | `plugins.entries.telegram.enabled: true` | **Required.** Without this, Telegram won't load even if `channels.telegram` is configured. |
 | `reasoning: false` | Prevents extended thinking mode that can cause empty responses. |
 | `network.autoSelectFamily: true` | Enables dual-stack IPv4/IPv6 for better connectivity. |
-| `--max-old-space-size=350` | Caps V8 heap to 350 MB. 256/320 OOM at boot, 384 without stubs — 350 works with ESM stubs. |
+| `--max-old-space-size=192` | Caps V8 heap. OOM at 96, minimum 128, production safe at 192. RSS is ~178 MB regardless (incompressible native code). |
 | `--expose-gc` | Enables `global.gc()`. Combined with hijack.js timer, frees ~10 MB every 60s. |
 | `maxConcurrency: 1` | One request at a time. More would OOM on 1 GB RAM. |
 
@@ -439,7 +447,7 @@ rm -f $ROOTFS/tmp/openclaw/*.lock
 <details>
 <summary><b>Out of memory / phone freezes</b></summary>
 
-- Verify `--max-old-space-size=350` is in NODE_OPTIONS
+- Verify `--max-old-space-size=192` is in NODE_OPTIONS
 - Kill unnecessary apps: `am force-stop <package>`
 - **Never kill** `com.google.android.gms` (breaks WiFi)
 </details>

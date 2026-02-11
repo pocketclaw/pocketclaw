@@ -185,7 +185,7 @@ proot \
 **Solution :** Limiter le heap Node.js et tuer les services Google avant le lancement.
 
 ```bash
-# Dans start-openclaw.sh (valeur initiale, réduite à 350 avec les stubs — voir Hack #20)
+# Dans start-openclaw.sh (valeur initiale, réduite à 192 avec les stubs — voir Hack #20)
 export NODE_OPTIONS='-r /root/hijack.js --max-old-space-size=384'
 
 # Tuer les services Google gourmands
@@ -199,7 +199,7 @@ am force-stop com.google.process.gapps
 **Budget RAM (final après Hacks #18-20) :**
 - MemTotal : 920 Mo
 - Android + GMS : ~430 Mo (non rooté, ne peut pas freeze GMS)
-- Gateway RSS : ~183 Mo (avec ESM stubs + heap 350)
+- Gateway RSS : ~178 Mo (avec ESM stubs + heap 192)
 - Marge : ~140 Mo (~15% de la RAM)
 
 ### Hack #12 — Bypass systemd + gateway run
@@ -453,16 +453,31 @@ bash scripts/create-stubs.sh
 - Compile cache = ce qui est compilé en bytecode (optimisation CPU)
 - Import ESM = ce qui est chargé en mémoire (consommation RAM)
 
-### Hack #20 — Heap 350 Mo (post-stubs)
-**Problème :** Le heap V8 (`--max-old-space-size`) contrôle combien de mémoire JavaScript peut utiliser. Avant les stubs : 256 Mo = OOM à 248 Mo, 320 Mo = OOM à 310 Mo, 384 Mo = minimum. V8 expand pour remplir le heap disponible.
+### Hack #20 — Heap 192 Mo (post-stubs, binary search)
+**Problème :** Le heap V8 (`--max-old-space-size`) contrôle combien de mémoire le *old space* JavaScript peut utiliser. Avant les stubs : 256 Mo = OOM, 320 Mo = OOM, 384 Mo = minimum. V8 expand pour remplir le heap disponible.
 
-**Discovery :** Avec les stubs ESM (Hack #19), le boot peak est plus bas car Node ne charge plus les SDK inutiles. 350 Mo de heap suffit maintenant.
+**Discovery :** Avec les stubs ESM (Hack #19), le boot peak est beaucoup plus bas. On a fait un binary search complet pour trouver le minimum :
 
-**Solution :** Réduire `--max-old-space-size` de 384 à 350.
+| Heap | Boot | RSS | Peak (VmHWM) |
+|---|---|---|---|
+| 384 (avant stubs) | ✅ | 196 Mo | ? |
+| 350 | ✅ | 183 Mo | ? |
+| 320 | ✅ | 180 Mo | 197 Mo |
+| 288 | ✅ | 173 Mo | 196 Mo |
+| 256 | ✅ | 177 Mo | 198 Mo |
+| 224 | ✅ | 177 Mo | 197 Mo |
+| 192 | ✅ | 178 Mo | 196 Mo |
+| 160 | ✅ | 182 Mo | 196 Mo |
+| 128 | ✅ | 172 Mo | 195 Mo |
+| **96** | **OOM** | — | — |
+
+**Conclusion :** Le heap JS réel est entre 96 et 128 Mo. Le RSS process (~175-180 Mo) est **incompressible** — c'est le code natif Node.js + V8 engine + buffers + mmap, pas le heap JS. Baisser le heap en dessous de 128 ne réduit plus le RSS.
+
+**Choix production : 192 Mo.** Ça laisse ~60-90 Mo de marge pour les requêtes LLM avec de gros contextes, le GC, et les pics de parsing JSON. Le minimum absolu est 128 Mo mais sans marge.
 
 ```bash
 # Dans start-openclaw.sh
-export NODE_OPTIONS='-r /root/hijack.js --expose-gc --max-old-space-size=350'
+export NODE_OPTIONS='-r /root/hijack.js --expose-gc --max-old-space-size=192'
 ```
 
 **Aussi testé et éliminé :**
@@ -470,11 +485,11 @@ export NODE_OPTIONS='-r /root/hijack.js --expose-gc --max-old-space-size=350'
 - `--jitless` : -6 à -40% perf CPU, pas viable sur Snapdragon 410
 - `--lite-mode` : flag compile-time V8, pas un flag runtime
 
-**Gain :** -12 Mo RSS supplémentaires (196 → ~183 Mo).
+**Gain :** RSS 224 → ~178 Mo (-46 Mo, -21%). Heap 384 → 192 Mo (-50%).
 
-**Gains combinés Hacks #18-20 :** 224 Mo → 183 Mo RSS (-41 Mo, -18%), 148 Mo → 471 Mo disque libre (+323 Mo).
+**Gains combinés Hacks #18-20 :** 224 Mo → 178 Mo RSS (-46 Mo, -21%), 148 Mo → 471 Mo disque libre (+323 Mo).
 
-**Statut : ✅ RÉSOLU — Gateway stable à ~183 Mo RSS avec heap 350 Mo**
+**Statut : ✅ RÉSOLU — Gateway stable à ~178 Mo RSS avec heap 192 Mo**
 
 ---
 
@@ -609,11 +624,11 @@ Fichier : `~/.openclaw/openclaw.json`
 
 **NODE_OPTIONS (dans start-openclaw.sh) :**
 ```bash
-export NODE_OPTIONS='-r /root/hijack.js --expose-gc --max-old-space-size=350'
+export NODE_OPTIONS='-r /root/hijack.js --expose-gc --max-old-space-size=192'
 ```
 - `-r /root/hijack.js` : Bionic bypass + periodic GC (Hack #4)
 - `--expose-gc` : Active `global.gc()`, utilisé par hijack.js toutes les 60s (~11 Mo libérés/cycle)
-- `--max-old-space-size=350` : Heap V8 (Hack #20, était 384 avant stubs)
+- `--max-old-space-size=192` : Heap V8 (Hack #20 — minimum absolu 128, prod safe à 192)
 
 ---
 
@@ -623,10 +638,10 @@ export NODE_OPTIONS='-r /root/hijack.js --expose-gc --max-old-space-size=350'
 |---|---|---|
 | Ubuntu 25.10 dans proot | ✅ | armhf, Node.js 22.12.0 |
 | OpenClaw 2026.2.9 | ✅ | Gateway run, port 9000 |
-| V8 heap | ✅ | `--max-old-space-size=350` (Hack #20) |
+| V8 heap | ✅ | `--max-old-space-size=192` (Hack #20) |
 | ESM stubs | ✅ | 9 packages stubbés (Hack #19) |
 | npm packages nettoyés | ✅ | 13 packages supprimés, node_modules 413 → 151 Mo |
-| Gateway RSS | ✅ | **~183 Mo** (était 224 Mo au départ) |
+| Gateway RSS | ✅ | **~178 Mo** (était 224 Mo au départ, -21%) |
 | Disque libre | ✅ | **471 Mo** (était ~100 Mo) |
 | Plugin Telegram | ✅ | `@pocketclawbot`, long polling |
 | Provider Kimi Coding | ✅ | `kimi-coding/kimi-for-coding` (262K contexte) |
@@ -754,7 +769,7 @@ adb shell "run-as com.termux sh -c 'export PREFIX=/data/data/com.termux/files/us
 1. Tuer les services lourds (⚠️ **SAUF** `com.google.android.gms` et `com.google.android.gsf` — les tuer casse le routage WiFi ! Voir Hack #13)
 2. Vérifier la RAM libre : `cat /proc/meminfo | head -3`
 3. Il faut au moins 400 Mo libres avant de lancer
-4. Utiliser `--max-old-space-size=350` dans NODE_OPTIONS (avec ESM stubs, Hack #19+20)
+4. Utiliser `--max-old-space-size=192` dans NODE_OPTIONS (avec ESM stubs, Hack #19+20)
 
 ### openclaw doctor / config qui se bloque
 **Symptôme :** La commande hang indéfiniment
@@ -810,7 +825,7 @@ adb shell "run-as com.termux sh -c 'export PREFIX=/data/data/com.termux/files/us
 9. ~~Termux:Boot auto-start (Hack #17)~~ ✅
 10. ~~Compile cache cleanup (Hack #18)~~ ✅
 11. ~~ESM stubs (Hack #19)~~ ✅ — 9 packages stubbés, 13 supprimés
-12. ~~Heap 350 Mo (Hack #20)~~ ✅
+12. ~~Heap 192 Mo (Hack #20)~~ ✅ — binary search 384→192, minimum absolu 128
 13. ~~Script watchdog~~ ✅ — watchdog loop + healthcheck cron
 14. ~~Log rotation~~ ✅ — cron toutes les heures
 15. ~~CLI `pocketclaw`~~ ✅ — start/stop/restart/status/logs/monitor
