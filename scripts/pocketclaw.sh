@@ -59,13 +59,10 @@ case "${1:-help}" in
     MEM_AVAIL=$((MEM_FREE + MEM_CACHED))
     echo "RAM:      ${MEM_AVAIL}MB available / ${MEM_TOTAL}MB total (${MEM_FREE}MB free + ${MEM_CACHED}MB cached)"
 
-    # OpenClaw RAM
-    if [ -n "$GW_PID" ]; then
-      GW_RSS=$(awk '{print int($2/1024)}' /proc/$GW_PID/statm 2>/dev/null | head -1)
-      if [ -z "$GW_RSS" ]; then
-        GW_RSS=$(ps aux 2>/dev/null | grep openclaw-gateway | grep -v grep | awk '{print int($6/1024)}' | head -1)
-      fi
-      echo "Gateway:  ${GW_RSS:-?}MB RSS"
+    # OpenClaw RAM — from API procs list (avoids /proc visibility issues)
+    GW_RSS=$(curl -s --connect-timeout 2 http://localhost:9000/api/status 2>/dev/null | grep -o '"n":"openclaw-gateway","m":[0-9]*' | grep -o '[0-9]*$')
+    if [ -n "$GW_RSS" ]; then
+      echo "Gateway:  ${GW_RSS}MB RSS"
     fi
 
     # Swap
@@ -73,9 +70,16 @@ case "${1:-help}" in
     SWAPPINESS=$(cat /proc/sys/vm/swappiness)
     echo "Swap:     ${SWAP_USED}MB used (swappiness=$SWAPPINESS)"
 
-    # Disk
-    DISK_FREE=$(df /data 2>/dev/null | tail -1 | awk '{print int($4/1024)}')
-    echo "Disk:     ${DISK_FREE:-?}MB free"
+    # Disk — parse stat -f (Termux df gives human-readable, unusable by awk)
+    STAT_OUT=$(stat -f /data 2>/dev/null)
+    DISK_BSIZE=$(echo "$STAT_OUT" | grep "Block size" | grep -o 'Block size: [0-9]*' | grep -o '[0-9]*')
+    DISK_AVAIL=$(echo "$STAT_OUT" | grep "Available" | grep -o 'Available: [0-9]*' | grep -o '[0-9]*')
+    if [ -n "$DISK_AVAIL" ] && [ -n "$DISK_BSIZE" ]; then
+      DISK_FREE=$(( DISK_AVAIL * DISK_BSIZE / 1024 / 1024 ))
+    else
+      DISK_FREE="?"
+    fi
+    echo "Disk:     ${DISK_FREE}MB free"
 
     # Battery
     BAT_PCT=$(cat /sys/class/power_supply/battery/capacity 2>/dev/null || echo "?")

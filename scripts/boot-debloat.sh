@@ -113,6 +113,7 @@ pm disable com.android.chrome 2>/dev/null
 pm disable com.android.defcontainer 2>/dev/null
 pm disable com.qualcomm.qcrilmsgtunnel 2>/dev/null
 pm disable fr.neamar.kiss 2>/dev/null
+sysctl -w vm.swappiness=10 2>/dev/null
 echo BOOT_DEBLOAT_DONE
 ' | $RUNAS 2>/dev/null | grep -E "DONE|new state"
 

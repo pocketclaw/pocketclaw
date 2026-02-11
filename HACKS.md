@@ -1,6 +1,6 @@
 # PocketClaw — OpenClaw sur un Moto E2 (The Impossible Install)
 
-> "They said it couldn't be done. We did it anyway. 33 hacks later."
+> "They said it couldn't be done. We did it anyway. 36 hacks later."
 
 **Date :** 10-11 février 2026
 **Appareil :** Motorola Moto E2 (2015) — codename `surnia`/`otis`
@@ -15,7 +15,7 @@
 | Android | 6.0 (Marshmallow) | 10+ | **4 versions en dessous** |
 | RAM | 1 Go (920 Mo réels) | 3 Go | **3x moins** |
 | CPU | Snapdragon 410 (ARM32) | ARM64 recommandé | **Architecture legacy** |
-| Stockage interne | 8 Go (~700 Mo libres) | 2 Go+ libres | **3x moins** |
+| Stockage interne | 8 Go (~663 Mo libres) | 2 Go+ libres | **3x moins** |
 | Node.js Termux natif | v12 max | v22 | **10 versions majeures** |
 | proot-distro | Pas dans les repos | Requis | **Inexistant** |
 | dpkg/apt | Cassé (stat error) | Fonctionnel | **Inutilisable** |
@@ -1387,6 +1387,65 @@ apksigner sign --ks debug.keystore aligned.apk
 
 ---
 
+### Hack #34 — Proot Rootfs Diet (741 MB → 550 MB)
+
+**Problem:** Proot Ubuntu rootfs bloated at 741 MB. Only 471 MB free on /data. Most space wasted on things OpenClaw never touches.
+
+**Solution:** Identified and removed dead weight:
+- Node.js C++ headers (`/usr/local/include/node/`): **65 MB** — only needed for `node-gyp` native module compilation, never used
+- Python 3.13 + Python 3: **52 MB** — Ubuntu default, OpenClaw is pure Node.js
+- Locale files (`/usr/share/locale/`): **37 MB** — no terminal locale needed in proot
+- i18n data (`/usr/share/i18n/`): **18 MB** — same
+- Man pages (`/usr/share/man/`): **11 MB** — no one reads man pages on a headless phone server
+- Documentation (`/usr/share/doc/`): **12 MB**
+
+**Result:** 195 MB recovered. Disk free: 471 → 663 MB (+41%). Rootfs: 741 → 550 MB.
+
+**Gotcha:** Don't delete `/usr/lib/arm-linux-gnueabihf/` (77 MB) — contains libc, libssl, libz needed by Node.js.
+
+**Status: OK — gateway runs fine after cleanup, all 195 MB recovered**
+
+---
+
+### Hack #35 — Pocketclaw CLI Fixes (RSS + Disk)
+
+**Problem:** `pocketclaw status` showed Gateway RSS as 48 MB (wrong — actually 197 MB) and Disk as 0 MB free.
+
+**Root causes:**
+1. RSS: `pgrep -f "openclaw-gateway"` matched the proot wrapper PID, not the actual Node.js process. `/proc/PID/statm` read the wrapper's tiny RSS.
+2. Disk: Termux's `df` outputs human-readable format (`515.6M`) even with `-k` flag. `awk '{print int($4/1024)}'` on `"515.6M"` → 0.
+
+**Solution:**
+1. RSS: Read from gateway's own `/api/status` endpoint which reports accurate process list with RSS from `/proc/[pid]/status`
+2. Disk: Parse `stat -f /data` which gives numeric block counts, then calculate: `available_blocks * block_size / 1024 / 1024`
+
+**Status: OK — both values now accurate**
+
+---
+
+### Hack #36 — Process Name Cleanup in Dashboard
+
+**Problem:** Dashboard showed raw Android package names (`com.termux`, `android.process.media`) — ugly and wastes horizontal space on a 4.5" screen.
+
+**Solution:** Added regex chain in hijack.js `_getProcs()`:
+```javascript
+name = name
+  .replace(/^com\.android\./, "")
+  .replace(/^android\.process\./, "")
+  .replace(/^com\.motorola\./, "moto.")
+  .replace(/^com\.google\.android\./, "goog.")
+  .replace(/^com\.pocketclaw\./, "")
+  .replace(/^com\.qualcomm\./, "qc.")
+  .replace(/^com\.termux\.?/, "termux")
+  .replace(/^fr\.neamar\./, "");
+```
+
+**Result:** `com.termux` → `termux`, `android.process.media` → `media`. Clean, readable process list.
+
+**Status: OK — deployed and visible on dashboard + native APK**
+
+---
+
 *"On m'a dit que c'était impossible, alors je l'ai fait." — Probablement pas Einstein, mais on s'en fout.*
 
-*Total : ~8 heures du premier `pkg install` au dashboard natif sur l'écran d'accueil. 33 hacks. 0 EUR de hardware. Un Moto E2 de 2015 qui fait tourner un agent IA autonome en 2026 avec dashboard CRT green, breakdown RAM par process, et un APK natif de 12.6 KB qui consomme 45 MB au lieu de 216 MB.*
+*Total : ~9 heures du premier `pkg install` au dashboard natif sur l'écran d'accueil. 36 hacks. 0 EUR de hardware. Un Moto E2 de 2015 qui fait tourner un agent IA autonome en 2026 avec dashboard CRT green, breakdown RAM par process, un APK natif de 12.6 KB, et 663 MB libres sur le disque.*
