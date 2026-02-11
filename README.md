@@ -15,7 +15,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Android 5+](https://img.shields.io/badge/Android-5%2B-green.svg)](https://www.android.com)
 [![OpenClaw](https://img.shields.io/badge/OpenClaw-2026.2.9-blue.svg)](https://openclaw.ai)
-[![Kimi K2.5](https://img.shields.io/badge/Kimi_K2.5-262K_context-purple.svg)](https://kimi.com)
+[![Any LLM](https://img.shields.io/badge/Any_LLM-OpenAI_compatible-purple.svg)](#-pick-your-ai)
 [![Telegram Bot](https://img.shields.io/badge/Telegram-Bot_API-26A5E4.svg)](https://core.telegram.org/bots)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
@@ -33,9 +33,9 @@
 
 You have an old phone in a drawer. It's worthless. Nobody wants it.
 
-We turned it into a **self-hosted AI assistant** that runs 24/7, answers on Telegram, uses a 262K context window, costs $0/month, and survives reboots on its own.
+We turned it into a **self-hosted AI assistant** that runs 24/7, answers on Telegram, and survives reboots on its own.
 
-No cloud server. No subscription. No root required. Just a mass of hacks and stubborness.
+No cloud server. No root required. Bring your own AI — free or paid, your choice. Just a mass of hacks and stubbornness.
 
 ```
 You:     "hey, what's the weather like?"
@@ -47,7 +47,7 @@ Bot:     "I'm running on a Moto E2 from 2015 with 1GB of RAM.
 ## What You Get
 
 - **A Telegram bot** running 24/7 on a phone that belongs in a museum
-- **Kimi K2.5** — 262K context window, free tier, zero cost
+- **Any AI you want** — works with any OpenAI-compatible provider (see [Pick Your AI](#-pick-your-ai))
 - **Fully autonomous** — auto-restarts on boot, works on any WiFi
 - **17 documented hacks** — every impossible problem we hit, and how we solved it
 
@@ -70,8 +70,8 @@ If it runs on a Moto E2 from 2015, **it runs on anything you own.**
 
 ```
 ┌─────────────┐         ┌─────────────────┐
-│  Telegram    │◄───────►│  Kimi API       │
-│  (you)       │         │  (free, 262K)   │
+│  Telegram    │◄───────►│  Any LLM API    │
+│  (you)       │         │  (your choice)  │
 └──────┬───────┘         └────────┬────────┘
        │                          │
        └──────────┬───────────────┘
@@ -90,7 +90,7 @@ If it runs on a Moto E2 from 2015, **it runs on anything you own.**
         └────────────────────┘
 ```
 
-All connections are **outbound**. The phone calls Telegram and Kimi — they never call back. This means: any WiFi works, any hotspot works, no port forwarding, no dynamic DNS. Plug it in and forget about it.
+All connections are **outbound**. The phone calls Telegram and your AI provider — they never call back. This means: any WiFi works, any hotspot works, no port forwarding, no dynamic DNS. Plug it in and forget about it.
 
 ---
 
@@ -188,9 +188,7 @@ printf "nameserver 2001:4860:4860::8888\nnameserver 2001:4860:4860::8844\n" > $R
 
 ### Step 7 — Get your API keys
 
-**Kimi API Key (free):**
-1. Go to [kimi.com/code/console](https://www.kimi.com/code/console)
-2. Create an API key (`sk-kimi-...`)
+**AI Provider API Key:** Pick any provider from the [Pick Your AI](#-pick-your-ai) section below. Get an API key from their dashboard.
 
 **Telegram Bot Token:**
 1. Message [@BotFather](https://t.me/BotFather) on Telegram
@@ -240,13 +238,55 @@ Now unplug the phone. Put it in a drawer. It restarts everything on its own afte
 
 ---
 
+## 🧠 Pick Your AI
+
+OpenClaw works with **30+ providers** out of the box. Just change the provider, model name, and API key in `openclaw.json`. Model format is always `provider/model-name`.
+
+### Free tier providers (no credit card needed)
+
+| Provider | ID | Free Tier | Best Models | Context |
+|---|---|---|---|---|
+| **[Google Gemini](https://ai.google.dev/)** | `google` | 1,000 req/day, 250K TPM | Gemini 2.5 Pro/Flash | **1M** |
+| **[Groq](https://console.groq.com/)** | `groq` | 500K tokens/day | Llama 4, Qwen3 | 131K |
+| **[Cerebras](https://cloud.cerebras.ai/)** | `cerebras` | ~1M tokens/day | Llama 3.3 70B, GLM 4.7 | 128K |
+| **[SambaNova](https://cloud.sambanova.ai/)** | custom | 10-30 RPM | Llama 405B | 128K |
+| **[OpenRouter](https://openrouter.ai/)** | `openrouter` | Free `:free` models | DeepSeek, Gemini, Llama | Varies |
+| **[Mistral](https://console.mistral.ai/)** | `mistral` | 1B tokens/month (2 RPM) | Mistral Small, Pixtral | 128K |
+| **[Venice AI](https://venice.ai/)** | `venice` | Free tier available | Llama 3.3 70B | 128K |
+
+### Paid providers
+
+| Provider | ID | Pricing | Best Models | Context |
+|---|---|---|---|---|
+| **[Anthropic](https://console.anthropic.com/)** | `anthropic` | Pay-per-token | Claude Opus 4.6, Sonnet 4.5 | 200K |
+| **[OpenAI](https://platform.openai.com/)** | `openai` | Pay-per-token | GPT-5.2, GPT-5 Mini | 128K |
+| **[Kimi Coding](https://kimi.com/code)** | custom | ~$19/month | Kimi K2.5 | 262K |
+| **[xAI (Grok)](https://x.ai/api)** | `xai` | $25 free credit then paid | Grok 4, Grok 4 Mini | 131K |
+| **[DeepSeek](https://platform.deepseek.com/)** | custom | $0.03-$0.42/M tokens | DeepSeek V3.2, R1 | 128K |
+| **[Amazon Bedrock](https://aws.amazon.com/bedrock/)** | `amazon-bedrock` | AWS pricing | Claude, Llama, etc. | Varies |
+| **[Google Vertex AI](https://cloud.google.com/vertex-ai)** | `google-vertex` | GCP pricing | Gemini models | 1M |
+| **[Z.AI (Zhipu)](https://open.bigmodel.cn/)** | `zai` | Pay-per-token | GLM-4.7, GLM-4.6v | 128K |
+| **[MiniMax](https://www.minimax.io/)** | custom | Pay-per-token | MiniMax M2.1 | 128K |
+
+### Local models (free, runs on your network)
+
+| Provider | ID | Setup |
+|---|---|---|
+| **[Ollama](https://ollama.com/)** | `ollama` | Auto-discovered at `localhost:11434` |
+| **[LM Studio](https://lmstudio.ai/)** | custom | `http://localhost:1234/v1` |
+| **[vLLM](https://docs.vllm.ai/)** | custom | Any OpenAI-compatible `/v1` endpoint |
+
+> **This guide uses Kimi K2.5** because that's what we stress-tested PocketClaw with. But if you want $0/month, grab a free provider above — **Gemini and Groq** are the easiest to set up. For full privacy, run a local model with Ollama.
+
+---
+
 ## ⚙️ Configuration
 
 ### Critical settings in `openclaw.json`
 
 | Setting | Why it matters |
 |---|---|
-| `User-Agent: claude-code/1.0` | **Required.** Kimi API blocks requests without a recognized coding agent header. Must be set at both provider AND model level. |
+| `User-Agent: claude-code/1.0` | **Kimi only.** Kimi API blocks requests without a recognized coding agent header. Not needed for other providers. |
 | `plugins.entries.telegram.enabled: true` | **Required.** Without this, Telegram won't load even if `channels.telegram` is configured. |
 | `reasoning: false` | Prevents extended thinking mode that can cause empty responses. |
 | `network.autoSelectFamily: true` | Enables dual-stack IPv4/IPv6 for better connectivity. |
@@ -368,7 +408,7 @@ Every single problem we hit — and the hack that fixed it. From proot crashes t
 | proot-distro | Ubuntu 25.10 (armhf) |
 | Node.js | 22.12.0 |
 | OpenClaw | 2026.2.9 |
-| Model | Kimi For Coding (K2.5, 262K context) |
+| AI Model | Kimi K2.5 (works with [any provider](#-pick-your-ai)) |
 
 ---
 
@@ -390,7 +430,7 @@ MIT — do whatever you want with it.
 
 **Built with stubbornness on a mass of impossible constraints.**
 
-*A phone from 2015. 1GB of RAM. 17 hacks. $0 spent.*<br>
+*A phone from 2015. 1GB of RAM. 17 hacks.*<br>
 *If it can run AI, anything can.*
 
 **[Star this repo](https://github.com/MonteiroRobin/pocketclaw)** if you think old phones deserve a second life.
