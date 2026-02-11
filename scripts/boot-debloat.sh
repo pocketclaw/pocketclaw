@@ -114,10 +114,11 @@ pm disable com.android.defcontainer 2>/dev/null
 pm disable com.qualcomm.qcrilmsgtunnel 2>/dev/null
 pm disable fr.neamar.kiss 2>/dev/null
 # --- Tier 1.5: Aggressive debloat (headless server mode) ---
-# These save ~187 MB but remove phone UI. Recoverable via:
+# These save ~150 MB but remove phone UI. Recoverable via:
 #   adb shell pm enable com.android.systemui  (if bootloop)
 pm disable com.android.systemui 2>/dev/null
-pm disable com.android.phone 2>/dev/null
+# NOTE: com.android.phone left ENABLED — system_server force-starts it anyway
+# and the crash dialog is annoying. 12 MB cost accepted.
 pm disable com.android.providers.telephony 2>/dev/null
 pm disable com.android.providers.media 2>/dev/null
 pm disable com.android.keychain 2>/dev/null
