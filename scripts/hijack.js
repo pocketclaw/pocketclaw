@@ -147,7 +147,12 @@ body::after{content:"";position:fixed;inset:0;background:repeating-linear-gradie
 .t{text-align:center;font-size:5vw;letter-spacing:.8em;color:#0f0;margin:8px 0 2px;padding-right:-.8em;text-shadow:0 0 10px rgba(0,255,65,.5),0 0 30px rgba(0,255,65,.15);animation:glow 3s ease-in-out infinite}
 @keyframes glow{0%,100%{text-shadow:0 0 10px rgba(0,255,65,.5),0 0 30px rgba(0,255,65,.15)}50%{text-shadow:0 0 20px rgba(0,255,65,.7),0 0 50px rgba(0,255,65,.25)}}
 .sub{text-align:center;font-size:2vw;color:#1a3a1a;margin-bottom:2px;letter-spacing:.3em}
-.lb{text-align:center;color:#f90;font-size:4vw;line-height:1.3;margin:4px 0;white-space:pre;text-shadow:0 0 10px rgba(255,153,0,.6),0 0 20px rgba(255,100,0,.25);min-height:14vw;font-weight:bold}
+.lb{text-align:center;margin:8px 0;min-height:14vw}
+.lb svg{filter:drop-shadow(0 0 12px rgba(255,40,20,.4)) drop-shadow(0 0 30px rgba(255,20,10,.15))}
+.lc{transform-origin:70px 74px;animation:clawL 3s ease-in-out infinite}
+.rc{transform-origin:170px 74px;animation:clawR 3s ease-in-out infinite}
+@keyframes clawL{0%,100%{transform:rotate(0)}50%{transform:rotate(-8deg)}}
+@keyframes clawR{0%,100%{transform:rotate(0)}50%{transform:rotate(8deg)}}
 .sec-t{font-size:1.8vw;color:#0a3a0a;letter-spacing:.4em;text-transform:uppercase;margin:4px 0 2px 18px}
 .r{display:flex;align-items:center;padding:1vw 0;font-size:3vw}
 .i{width:16px;text-align:center;margin-right:4px;font-size:2.2vw}
@@ -190,27 +195,91 @@ body::after{content:"";position:fixed;inset:0;background:repeating-linear-gradie
 <div class="pad">
 <div class="t">POCKETCLAW</div>
 <div class="sub">MOTO E2 &#x2022; 1GB &#x2022; ANDROID 6</div>
-<pre class="lb" id="lb"></pre>
-<pre id="f0" hidden>      )\\.----./(
-     /( o    o )\\
-    /  |\\    /|  \\
-    \\ /  \\--/  \\ /
-     V  /(  )\\  V
-     | |  ()  | |
-     |  '----'  |
-     | /||  ||\\ |
-     |/ ||  || \\|
-        ^^  ^^</pre>
-<pre id="f1" hidden>      )(.----.)(
-     /( o    o )\\
-    /  |\\    /|  \\
-    \\ /  \\--/  \\ /
-     V  /(  )\\  V
-     | |  ()  | |
-     |  '----'  |
-     | /||  ||\\ |
-     |/ ||  || \\|
-        ^^  ^^</pre>
+<div class="lb"><svg viewBox="0 0 240 180" xmlns="http://www.w3.org/2000/svg" style="max-width:55vw">
+<defs><radialGradient id="cg" cx=".45" cy=".35"><stop offset="0%" stop-color="#f43"/><stop offset="55%" stop-color="#c22"/><stop offset="100%" stop-color="#811"/></radialGradient><radialGradient id="eg" cx=".4" cy=".3"><stop offset="0%" stop-color="#e33"/><stop offset="100%" stop-color="#911"/></radialGradient></defs>
+<!-- Legs (3 pairs, jointed, with claw tips) -->
+<g opacity=".85">
+<path d="M72 88 Q52 98 40 115 Q34 126 30 138" fill="none" stroke="#b33" stroke-width="3.5" stroke-linecap="round"/>
+<path d="M68 96 Q46 110 32 130 Q26 142 22 152" fill="none" stroke="#b33" stroke-width="3" stroke-linecap="round"/>
+<path d="M66 104 Q46 120 34 140 Q30 150 28 158" fill="none" stroke="#b33" stroke-width="2.5" stroke-linecap="round"/>
+<circle cx="30" cy="138" r="2.2" fill="#a22"/><circle cx="22" cy="152" r="2" fill="#a22"/><circle cx="28" cy="158" r="1.8" fill="#a22"/>
+<circle cx="40" cy="115" r="2" fill="#c44" opacity=".5"/><circle cx="32" cy="130" r="1.8" fill="#c44" opacity=".5"/><circle cx="34" cy="140" r="1.6" fill="#c44" opacity=".5"/>
+</g>
+<g opacity=".85">
+<path d="M168 88 Q188 98 200 115 Q206 126 210 138" fill="none" stroke="#b33" stroke-width="3.5" stroke-linecap="round"/>
+<path d="M172 96 Q194 110 208 130 Q214 142 218 152" fill="none" stroke="#b33" stroke-width="3" stroke-linecap="round"/>
+<path d="M174 104 Q194 120 206 140 Q210 150 212 158" fill="none" stroke="#b33" stroke-width="2.5" stroke-linecap="round"/>
+<circle cx="210" cy="138" r="2.2" fill="#a22"/><circle cx="218" cy="152" r="2" fill="#a22"/><circle cx="212" cy="158" r="1.8" fill="#a22"/>
+<circle cx="200" cy="115" r="2" fill="#c44" opacity=".5"/><circle cx="208" cy="130" r="1.8" fill="#c44" opacity=".5"/><circle cx="206" cy="140" r="1.6" fill="#c44" opacity=".5"/>
+</g>
+<!-- Left claw (arm + joint + pincer with teeth) -->
+<g class="lc">
+<path d="M70 74 Q50 60 34 46" fill="none" stroke="#c33" stroke-width="6.5" stroke-linecap="round"/>
+<path d="M34 46 Q24 34 18 24" fill="none" stroke="#c33" stroke-width="5.5" stroke-linecap="round"/>
+<circle cx="34" cy="46" r="4.5" fill="#d44" stroke="#a22" stroke-width="1.5"/><circle cx="52" cy="60" r="3" fill="#c44" opacity=".4"/>
+<path d="M18 24 Q10 12 6 4 Q4-2 10 0 Q16 3 22 12 Q26 18 24 24Z" fill="#e44" stroke="#922" stroke-width="1.5"/>
+<path d="M18 24 Q8 30 4 38 Q2 44 8 42 Q14 40 20 34 Q24 28 24 24Z" fill="#c33" stroke="#922" stroke-width="1.5"/>
+<circle cx="14" cy="8" r="1.3" fill="#b22"/><circle cx="18" cy="6" r="1" fill="#b22"/><circle cx="11" cy="11" r=".8" fill="#b22"/>
+<circle cx="12" cy="34" r="1.3" fill="#922"/><circle cx="16" cy="36" r="1" fill="#922"/><circle cx="10" cy="37" r=".8" fill="#922"/>
+<path d="M22 18 Q20 21 22 24" fill="none" stroke="#922" stroke-width="1" opacity=".4"/>
+</g>
+<!-- Right claw (mirror) -->
+<g class="rc">
+<path d="M170 74 Q190 60 206 46" fill="none" stroke="#c33" stroke-width="6.5" stroke-linecap="round"/>
+<path d="M206 46 Q216 34 222 24" fill="none" stroke="#c33" stroke-width="5.5" stroke-linecap="round"/>
+<circle cx="206" cy="46" r="4.5" fill="#d44" stroke="#a22" stroke-width="1.5"/><circle cx="188" cy="60" r="3" fill="#c44" opacity=".4"/>
+<path d="M222 24 Q230 12 234 4 Q236-2 230 0 Q224 3 218 12 Q214 18 216 24Z" fill="#e44" stroke="#922" stroke-width="1.5"/>
+<path d="M222 24 Q232 30 236 38 Q238 44 232 42 Q226 40 220 34 Q216 28 216 24Z" fill="#c33" stroke="#922" stroke-width="1.5"/>
+<circle cx="226" cy="8" r="1.3" fill="#b22"/><circle cx="222" cy="6" r="1" fill="#b22"/><circle cx="229" cy="11" r=".8" fill="#b22"/>
+<circle cx="228" cy="34" r="1.3" fill="#922"/><circle cx="224" cy="36" r="1" fill="#922"/><circle cx="230" cy="37" r=".8" fill="#922"/>
+<path d="M218 18 Q220 21 218 24" fill="none" stroke="#922" stroke-width="1" opacity=".4"/>
+</g>
+<!-- Carapace (main body) -->
+<ellipse cx="120" cy="90" rx="56" ry="38" fill="url(#cg)" stroke="#711" stroke-width="2.5"/>
+<!-- Carapace segments -->
+<path d="M76 80 Q120 58 164 80" fill="none" stroke="#922" stroke-width="1.5" opacity=".3"/>
+<path d="M82 90 Q120 70 158 90" fill="none" stroke="#922" stroke-width="1.2" opacity=".25"/>
+<path d="M86 98 Q120 82 154 98" fill="none" stroke="#922" stroke-width="1" opacity=".2"/>
+<!-- Central ridge + lateral grooves -->
+<path d="M120 56 L120 122" fill="none" stroke="#922" stroke-width=".8" opacity=".15"/>
+<path d="M76 76 Q80 84 78 94" fill="none" stroke="#922" stroke-width="1" opacity=".18"/>
+<path d="M164 76 Q160 84 162 94" fill="none" stroke="#922" stroke-width="1" opacity=".18"/>
+<!-- Tubercles (shell bumps) -->
+<circle cx="106" cy="76" r="3.5" fill="#d33" opacity=".18"/><circle cx="134" cy="76" r="3.5" fill="#d33" opacity=".18"/>
+<circle cx="120" cy="70" r="3" fill="#d33" opacity=".15"/>
+<circle cx="98" cy="84" r="2.5" fill="#b22" opacity=".12"/><circle cx="142" cy="84" r="2.5" fill="#b22" opacity=".12"/>
+<circle cx="120" cy="82" r="2.5" fill="#b22" opacity=".1"/>
+<circle cx="108" cy="94" r="2" fill="#a22" opacity=".1"/><circle cx="132" cy="94" r="2" fill="#a22" opacity=".1"/>
+<circle cx="120" cy="100" r="1.8" fill="#a22" opacity=".08"/>
+<!-- Carapace highlight -->
+<ellipse cx="108" cy="74" rx="16" ry="10" fill="#f55" opacity=".1"/>
+<!-- Edge spines -->
+<g fill="none" stroke="#922" stroke-width="1.2" opacity=".2">
+<path d="M70 84 L66 82"/><path d="M72 90 L67 90"/><path d="M74 96 L68 98"/>
+<path d="M170 84 L174 82"/><path d="M168 90 L173 90"/><path d="M166 96 L172 98"/>
+</g>
+<!-- Eye stalks -->
+<path d="M100 58 Q96 48 92 40" fill="none" stroke="#c33" stroke-width="5" stroke-linecap="round"/>
+<path d="M140 58 Q144 48 148 40" fill="none" stroke="#c33" stroke-width="5" stroke-linecap="round"/>
+<circle cx="98" cy="49" r="2.5" fill="#c44" opacity=".5"/><circle cx="142" cy="49" r="2.5" fill="#c44" opacity=".5"/>
+<!-- Eyeballs -->
+<circle cx="90" cy="37" r="8.5" fill="url(#eg)" stroke="#811" stroke-width="2"/>
+<circle cx="150" cy="37" r="8.5" fill="url(#eg)" stroke="#811" stroke-width="2"/>
+<!-- Pupils -->
+<circle cx="89" cy="36" r="5" fill="#111"/><circle cx="149" cy="36" r="5" fill="#111"/>
+<!-- Eye highlights -->
+<circle cx="91" cy="34" r="2.2" fill="#fff" opacity=".8"/><circle cx="151" cy="34" r="2.2" fill="#fff" opacity=".8"/>
+<circle cx="88" cy="38" r="1" fill="#fff" opacity=".3"/><circle cx="148" cy="38" r="1" fill="#fff" opacity=".3"/>
+<!-- Mouth + mandibles -->
+<path d="M108 108 Q120 115 132 108" fill="none" stroke="#711" stroke-width="2" stroke-linecap="round"/>
+<path d="M112 110 Q110 116 113 120" fill="none" stroke="#922" stroke-width="1.5" stroke-linecap="round"/>
+<path d="M128 110 Q130 116 127 120" fill="none" stroke="#922" stroke-width="1.5" stroke-linecap="round"/>
+<!-- Antennules -->
+<path d="M106 105 Q102 100 98 96" fill="none" stroke="#922" stroke-width="1" opacity=".5" stroke-linecap="round"/>
+<path d="M134 105 Q138 100 142 96" fill="none" stroke="#922" stroke-width="1" opacity=".5" stroke-linecap="round"/>
+<!-- Belly plate -->
+<ellipse cx="120" cy="108" rx="14" ry="8" fill="none" stroke="#711" stroke-width=".8" opacity=".15"/>
+</svg></div>
 <div class="sec-t">services</div>
 <div class="r"><span class="i" id="ig">&#x25CF;</span><span class="l">Gateway</span><span class="v" id="vg">...</span></div>
 <div class="r"><span class="i" id="iw">&#x25CF;</span><span class="l">WiFi</span><span class="v" id="vw">...</span></div>
@@ -235,7 +304,6 @@ body::after{content:"";position:fixed;inset:0;background:repeating-linear-gradie
 </div>
 </div>
 <script>
-var t=0,F=[document.getElementById("f0").textContent,document.getElementById("f1").textContent];
 var bootDone=false;
 function si(id,c){document.getElementById(id).className="i "+c}
 function updateBoot(d){
@@ -275,8 +343,7 @@ document.getElementById("procs").innerHTML=html;
 document.getElementById("lu").textContent="uptime: "+d.uptime;
 if(d.lastError){document.getElementById("le").textContent="err: "+d.lastError;document.getElementById("le").className="e er"}
 else{document.getElementById("le").textContent="errors: none";document.getElementById("le").className="e"}
-}).catch(function(){si("ig","fl");document.getElementById("vg").textContent="OFFLINE";document.getElementById("vg").className="v e"});
-document.getElementById("lb").textContent=F[t%2];t++}
+}).catch(function(){si("ig","fl");document.getElementById("vg").textContent="OFFLINE";document.getElementById("vg").className="v e"})}
 setTimeout(function(){document.getElementById("boot").classList.add("out")},3000);
 go();setInterval(go,3000);
 </script></body></html>`;
