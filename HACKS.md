@@ -1,6 +1,6 @@
 # PocketClaw — OpenClaw sur un Moto E2 (The Impossible Install)
 
-> "They said it couldn't be done. We did it anyway. 39 hacks later."
+> "They said it couldn't be done. We did it anyway. 40 hacks later."
 
 **Date :** 10-11 février 2026
 **Appareil :** Motorola Moto E2 (2015) — codename `surnia`/`otis`
@@ -1511,6 +1511,45 @@ At the end: "Open http://localhost:9000/setup" — the setup wizard handles the 
 
 ---
 
+### Hack #40 — Tier 1.5: Headless Server Mode (pm disable system apps)
+
+**Problem:** Android consumes ~244 MB even after disabling 54+ Google/Motorola packages. SystemUI (70 MB RSS), Phone (42 MB), Media provider (40 MB), Keychain (35 MB) are all running for a phone that serves as a headless AI server. Nobody's making phone calls on this thing.
+
+**Solution:** `pm disable` the remaining system apps via Dirty COW root:
+```bash
+pm disable com.android.systemui      # -70 MB (status bar, nav buttons)
+pm disable com.android.phone          # -42 MB (dialer, no SIM anyway)
+pm disable com.android.providers.telephony  # telephony data
+pm disable com.android.providers.media      # -40 MB (media scanner)
+pm disable com.android.keychain       # -35 MB (cert management UI)
+```
+
+**Results after reboot:**
+| Metric | Before (Tier 1) | After (Tier 1.5) | Saved |
+|---|---|---|---|
+| Android base (sans gateway) | 244 MB | 196 MB | **48 MB** |
+| Total RAM used | 441 MB | 374 MB | **67 MB** |
+| RAM libre | 457 MB (51%) | 524 MB (58%) | **+67 MB** |
+| Gateway boot time | ~120s | ~70s | **42% faster** |
+
+**Key findings:**
+- `com.android.systemui` starts anyway in degraded mode (~5 MB instead of 70 MB) — system_server force-starts it
+- `com.android.phone` also respawns (~13 MB) — system_server is persistent
+- `am force-stop` on system services is useless — they respawn immediately from zygote
+- WiFi works fine without these (DHCP is in system_server, not GMS)
+- No bootloop — just slower boot (~5 min vs 2 min, system_server retries dead services)
+- V8 heap 128 MB remains stable — the earlier OOM was kernel pressure during chaotic boot, not heap limit
+
+**Added to `boot-debloat.sh`** with recovery comment:
+```bash
+# --- Tier 1.5: Aggressive debloat (headless server mode) ---
+# Recoverable via: adb shell pm enable com.android.systemui
+```
+
+**Status: OK — 374 MB RAM, 128 MB heap, gateway stable, Android base under 200 MB**
+
+---
+
 *"On m'a dit que c'était impossible, alors je l'ai fait." — Probablement pas Einstein, mais on s'en fout.*
 
-*Total : ~10 heures. 39 hacks. 0 EUR de hardware. Un Moto E2 de 2015 transformé en PocketClaw OS : agent IA autonome, dashboard CRT green, setup wizard web, installer one-liner, 715 MB libres sur le disque. De PoC à produit installable.*
+*Total : ~12 heures. 40 hacks. 0 EUR de hardware. Un Moto E2 de 2015 transformé en PocketClaw OS : agent IA autonome, dashboard CRT green, setup wizard web, installer one-liner, headless server mode avec Android à 196 MB. De PoC à produit installable.*
