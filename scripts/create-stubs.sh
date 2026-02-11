@@ -1,7 +1,8 @@
 #!/data/data/com.termux/files/usr/bin/bash
 # Create ESM stub packages for deleted npm dependencies
 # These satisfy ESM import resolution without installing the real packages
-# The code paths that use these imports are never reached (channels disabled)
+# The code paths that use these imports are never reached (disabled channels,
+# unused providers like AWS Bedrock and Google Gemini)
 #
 # Why stubs? OpenClaw bundles all channel SDKs via Rolldown (ESM). Even with
 # channels disabled, ESM resolves every `import` at link-time before any code
@@ -109,6 +110,37 @@ stub_pkg "playwright-core" \
   'export const chromium = { launch: () => Promise.reject(new Error("stub")) };
 export const devices = {};'
 
+# --- @aws-sdk/client-bedrock ---
+# Used by pi-ai for Bedrock model discovery (not our provider)
+mkdir -p "$OCDIR/@aws-sdk"
+stub_pkg "@aws-sdk/client-bedrock" \
+  '{"name":"@aws-sdk/client-bedrock","version":"0.0.0-stub","type":"module","main":"index.js"}' \
+  'export class BedrockClient { constructor() {} send() { return Promise.reject(new Error("stub")); } }
+export class ListFoundationModelsCommand { constructor() {} }'
+
+# --- @aws-sdk/client-bedrock-runtime ---
+# Used by pi-ai for Bedrock streaming (not our provider)
+stub_pkg "@aws-sdk/client-bedrock-runtime" \
+  '{"name":"@aws-sdk/client-bedrock-runtime","version":"0.0.0-stub","type":"module","main":"index.js"}' \
+  'export class BedrockRuntimeClient { constructor() {} send() { return Promise.reject(new Error("stub")); } }
+export const StopReason = {};
+export const CachePointType = {};
+export const CacheTTL = {};
+export const ConversationRole = {};
+export class ConverseStreamCommand { constructor() {} }
+export const ImageFormat = {};
+export const ToolResultStatus = {};'
+
+# --- @google/genai ---
+# Used by pi-ai for Google Gemini provider (not our provider)
+mkdir -p "$OCDIR/@google"
+stub_pkg "@google/genai" \
+  '{"name":"@google/genai","version":"0.0.0-stub","type":"module","main":"index.js"}' \
+  'export class GoogleGenAI { constructor() {} }
+export const FinishReason = {};
+export const FunctionCallingConfigMode = {};
+export const ThinkingLevel = {};'
+
 echo
 echo "All stubs created. Total:"
-du -sm "$OCDIR/@slack" "$OCDIR/@buape" "$OCDIR/discord-api-types" "$OCDIR/@line" "$OCDIR/@whiskeysockets" "$OCDIR/playwright-core" 2>/dev/null
+du -sm "$OCDIR/@slack" "$OCDIR/@buape" "$OCDIR/discord-api-types" "$OCDIR/@line" "$OCDIR/@whiskeysockets" "$OCDIR/playwright-core" "$OCDIR/@aws-sdk" "$OCDIR/@google" 2>/dev/null

@@ -185,23 +185,22 @@ proot \
 **Solution :** Limiter le heap Node.js et tuer les services Google avant le lancement.
 
 ```bash
-# Dans start-openclaw.sh
+# Dans start-openclaw.sh (valeur initiale, réduite à 350 avec les stubs — voir Hack #20)
 export NODE_OPTIONS='-r /root/hijack.js --max-old-space-size=384'
 
 # Tuer les services Google gourmands
-am force-stop com.google.android.gms
-am force-stop com.google.android.gsf
+# ⚠️ NE PAS tuer com.google.android.gms (voir Hack #13)
 am force-stop com.google.android.inputmethod.latin
 am force-stop android.process.media
 am force-stop android.process.acore
 am force-stop com.google.process.gapps
 ```
 
-**Budget RAM après optimisation :**
+**Budget RAM (final après Hacks #18-20) :**
 - MemTotal : 920 Mo
-- Après kill Google : ~370-480 Mo libres
-- Heap Node.js : 384 Mo (avec GC agressif)
-- Résultat : Le gateway utilise ~440 Mo (47.7% de la RAM totale)
+- Android + GMS : ~430 Mo (non rooté, ne peut pas freeze GMS)
+- Gateway RSS : ~183 Mo (avec ESM stubs + heap 350)
+- Marge : ~140 Mo (~15% de la RAM)
 
 ### Hack #12 — Bypass systemd + gateway run
 **Problème :** `openclaw gateway start` tente de se registrer comme service systemd (cherche `systemctl` et `$DBUS_SESSION_BUS_ADDRESS`), ce qui n'existe pas dans proot.
@@ -436,9 +435,9 @@ rm -rf $PREFIX/tmp/node-compile-cache/
 export class WebClient { constructor() {} }
 ```
 
-**6 packages stubbés :** `@slack/web-api`, `@slack/bolt`, `@buape/carbon`, `discord-api-types`, `@line/bot-sdk`, `@whiskeysockets/baileys`, `playwright-core`
+**9 packages stubbés :** `@slack/web-api`, `@slack/bolt`, `@buape/carbon`, `discord-api-types`, `@line/bot-sdk`, `@whiskeysockets/baileys`, `playwright-core`, `@aws-sdk/client-bedrock{,-runtime}`, `@google/genai`
 
-**3 packages supprimés** (pas importés du tout) : `@larksuiteoapi` (25 Mo), `@cloudflare` (10 Mo), `@mistralai` (22 Mo)
+**10 packages supprimés** (pas importés du tout) : `@larksuiteoapi`, `@cloudflare`, `@mistralai`, `pdfjs-dist`, `@napi-rs`, `@img`, `@smithy`, `bun-types`, `libsignal`, `@types`, `@silvia-odwyer`, `rimraf`, `web-streams-polyfill`
 
 ```bash
 # Créer les stubs (depuis Termux, pas proot)
@@ -446,7 +445,7 @@ bash scripts/create-stubs.sh
 # Re-run après chaque `openclaw update`
 ```
 
-**Gain :** -25 Mo RSS (233 → 208 Mo), -64 Mo disque (70 Mo → 6 Mo de stubs), node_modules 413 → ~230 Mo.
+**Gain :** -42 Mo RSS (224 → 182 Mo), node_modules 413 → 151 Mo (-262 Mo), disque libre +323 Mo.
 
 **Leçon ESM vs CJS :**
 - CJS : `require()` dans un `if (false)` ne charge jamais le module
@@ -457,7 +456,7 @@ bash scripts/create-stubs.sh
 ### Hack #20 — Heap 350 Mo (post-stubs)
 **Problème :** Le heap V8 (`--max-old-space-size`) contrôle combien de mémoire JavaScript peut utiliser. Avant les stubs : 256 Mo = OOM à 248 Mo, 320 Mo = OOM à 310 Mo, 384 Mo = minimum. V8 expand pour remplir le heap disponible.
 
-**Discovery :** Avec les stubs ESM (Hack #19), le boot peak est plus bas car Node ne charge plus 6 SDK complets. 350 Mo de heap suffit maintenant.
+**Discovery :** Avec les stubs ESM (Hack #19), le boot peak est plus bas car Node ne charge plus les SDK inutiles. 350 Mo de heap suffit maintenant.
 
 **Solution :** Réduire `--max-old-space-size` de 384 à 350.
 
@@ -471,11 +470,11 @@ export NODE_OPTIONS='-r /root/hijack.js --expose-gc --max-old-space-size=350'
 - `--jitless` : -6 à -40% perf CPU, pas viable sur Snapdragon 410
 - `--lite-mode` : flag compile-time V8, pas un flag runtime
 
-**Gain :** -12 Mo RSS supplémentaires (208 → 196 Mo).
+**Gain :** -12 Mo RSS supplémentaires (196 → ~183 Mo).
 
-**Gains combinés Hacks #18-20 :** 233 Mo → 196 Mo RSS (-37 Mo, -16%), 148 Mo → 332 Mo disque libre (+184 Mo).
+**Gains combinés Hacks #18-20 :** 224 Mo → 183 Mo RSS (-41 Mo, -18%), 148 Mo → 471 Mo disque libre (+323 Mo).
 
-**Statut : ✅ RÉSOLU — Gateway stable à 196 Mo RSS avec heap 350 Mo**
+**Statut : ✅ RÉSOLU — Gateway stable à ~183 Mo RSS avec heap 350 Mo**
 
 ---
 
@@ -484,42 +483,50 @@ export NODE_OPTIONS='-r /root/hijack.js --expose-gc --max-old-space-size=350'
 ```
 Termux ($PREFIX = /data/data/com.termux/files/usr)
 ├── bin/
+│   ├── start-openclaw     ← Lanceur gateway + watchdog (Hacks #11-13)
+│   ├── restart-gw         ← Clean kill + restart
 │   ├── run-proot          ← Script helper proot (Hack #10)
-│   ├── restart-gw         ← Clean restart (kill + relaunch)
-│   └── start-openclaw     ← Lanceur gateway (Hacks #11 + #12 + #13)
+│   ├── pocketclaw         ← CLI unifiée (start/stop/restart/status/logs/monitor)
+│   ├── healthcheck        ← Cron : restart si gateway freeze (toutes les 2 min)
+│   └── logrotate-pc       ← Cron : rotation logs (toutes les heures)
 ├── var/lib/proot-distro/installed-rootfs/ubuntu/  ← Ubuntu 25.10
-│   └── root/
-│       ├── hijack.js      ← Bionic bypass (Hack #4)
-│       └── .openclaw/
-│           ├── openclaw.json  ← Config (provider Kimi Coding + gateway local + Telegram)
-│           └── env            ← API keys (MOONSHOT_API_KEY + TELEGRAM_BOT_TOKEN)
+│   ├── root/
+│   │   ├── hijack.js      ← Bionic bypass + periodic GC (Hack #4)
+│   │   └── .openclaw/
+│   │       ├── openclaw.json  ← Config (Kimi Coding + Telegram + Whisper)
+│   │       └── env            ← API keys (chmod 600)
+│   └── .../openclaw/node_modules/
+│       ├── @slack/         ← ESM stub (Hack #19)
+│       ├── @buape/         ← ESM stub
+│       ├── @aws-sdk/       ← ESM stub
+│       ├── @google/        ← ESM stub
+│       └── ... (151 Mo total, était 413 Mo)
 └── tmp/
+    └── openclaw/           ← Logs + lock files
 
 ~/.termux/boot/
   └── start-openclaw.sh    ← Auto-start au boot (Hack #17)
 
 /sdcard/
-├── swapfile (512 Mo)      ← Swap (nécessite root pour swapon)
 └── npm-cache/             ← Cache npm déplacé (Hack #8)
 ```
 
 ### Commandes utiles :
 ```bash
-# Démarrer le gateway
-ssh -p 8022 -i ~/.ssh/id_moto localhost "start-openclaw"
+# CLI unifiée (depuis SSH)
+pocketclaw start         # Démarre le gateway
+pocketclaw stop          # Arrête proprement
+pocketclaw restart       # Restart complet
+pocketclaw status        # RAM, RSS, disque, uptime, batterie
+pocketclaw logs          # Tail des logs gateway
+pocketclaw monitor       # Dernières lignes du CSV stats
 
 # Accéder au dashboard (depuis le PC)
 adb forward tcp:9000 tcp:9000
 # Puis ouvrir http://localhost:9000
 
-# Vérifier les process
-ssh -p 8022 -i ~/.ssh/id_moto localhost "ps aux | grep node"
-
-# Vérifier la RAM
-ssh -p 8022 -i ~/.ssh/id_moto localhost "free -m"
-
-# Tuer le gateway
-ssh -p 8022 -i ~/.ssh/id_moto localhost "pkill -f openclaw"
+# Recréer les stubs ESM (après openclaw update)
+bash /sdcard/Download/create-stubs.sh
 ```
 
 ---
@@ -557,7 +564,9 @@ Fichier : `~/.openclaw/openclaw.json`
     "defaults": {
       "model": {
         "primary": "kimi-coding/kimi-for-coding"
-      }
+      },
+      "maxConcurrency": 1,
+      "maxQueueSize": 2
     }
   },
   "models": {
@@ -583,6 +592,13 @@ Fichier : `~/.openclaw/openclaw.json`
         ]
       }
     }
+  },
+  "tools": {
+    "media": {
+      "audio": {
+        "models": [{ "provider": "openai", "model": "whisper-1" }]
+      }
+    }
   }
 }
 ```
@@ -591,26 +607,36 @@ Fichier : `~/.openclaw/openclaw.json`
 
 **Token gateway :** `moto-e2-openclaw-2026` — à renseigner dans le dashboard web (Settings) pour se connecter.
 
+**NODE_OPTIONS (dans start-openclaw.sh) :**
+```bash
+export NODE_OPTIONS='-r /root/hijack.js --expose-gc --max-old-space-size=350'
+```
+- `-r /root/hijack.js` : Bionic bypass + periodic GC (Hack #4)
+- `--expose-gc` : Active `global.gc()`, utilisé par hijack.js toutes les 60s (~11 Mo libérés/cycle)
+- `--max-old-space-size=350` : Heap V8 (Hack #20, était 384 avant stubs)
+
 ---
 
-## État Actuel (11 février 2026, 01h30)
+## État Actuel (11 février 2026)
 
-| Étape | Statut |
-|---|---|
-| Ubuntu 25.10 dans proot | ✅ Fonctionnel |
-| Node.js 22.12.0 | ✅ Fonctionnel |
-| OpenClaw 2026.2.9 installé | ✅ 510 packages, 4 min |
-| Gateway **run** 384Mo | ✅ **OPÉRATIONNEL** |
-| Dashboard web (port 9000) | ✅ Accessible |
-| Plugin Telegram activé | ✅ `plugins.entries.telegram.enabled: true` |
-| Bot @pocketclawbot | ✅ Connecté, long polling actif |
-| Provider Kimi Coding | ✅ `kimi-coding/kimi-for-coding` (262K contexte) |
-| User-Agent spoof | ✅ `claude-code/1.0` (Hack #16) |
-| Termux:Boot auto-start | ✅ Auto-restart au boot (Hack #17) |
-| Première réponse IA | ✅ **BOT RÉPOND SUR TELEGRAM** |
-| IPv6 DNS + autoSelectFamily | ✅ Hack #15 |
-| Réseau IPv4 | ✅ Fonctionnel après reboot |
-| IP WiFi du téléphone | `192.168.1.14` (gateway box: `192.168.1.254`) |
+| Composant | Statut | Détails |
+|---|---|---|
+| Ubuntu 25.10 dans proot | ✅ | armhf, Node.js 22.12.0 |
+| OpenClaw 2026.2.9 | ✅ | Gateway run, port 9000 |
+| V8 heap | ✅ | `--max-old-space-size=350` (Hack #20) |
+| ESM stubs | ✅ | 9 packages stubbés (Hack #19) |
+| npm packages nettoyés | ✅ | 13 packages supprimés, node_modules 413 → 151 Mo |
+| Gateway RSS | ✅ | **~183 Mo** (était 224 Mo au départ) |
+| Disque libre | ✅ | **471 Mo** (était ~100 Mo) |
+| Plugin Telegram | ✅ | `@pocketclawbot`, long polling |
+| Provider Kimi Coding | ✅ | `kimi-coding/kimi-for-coding` (262K contexte) |
+| User-Agent spoof | ✅ | `claude-code/1.0` (Hack #16) |
+| Voice (Whisper) | ✅ | `tools.media.audio.models` configuré |
+| Termux:Boot auto-start | ✅ | Hack #17 |
+| Watchdog + healthcheck | ✅ | Watchdog loop + cron toutes les 2 min |
+| Log rotation | ✅ | Cron toutes les heures |
+| Periodic GC | ✅ | `global.gc()` toutes les 60s via hijack.js |
+| IPv6 DNS | ✅ | Hack #15 |
 
 ### Logs du gateway qui tourne :
 ```
@@ -728,7 +754,7 @@ adb shell "run-as com.termux sh -c 'export PREFIX=/data/data/com.termux/files/us
 1. Tuer les services lourds (⚠️ **SAUF** `com.google.android.gms` et `com.google.android.gsf` — les tuer casse le routage WiFi ! Voir Hack #13)
 2. Vérifier la RAM libre : `cat /proc/meminfo | head -3`
 3. Il faut au moins 400 Mo libres avant de lancer
-4. Utiliser `--max-old-space-size=384` dans NODE_OPTIONS
+4. Utiliser `--max-old-space-size=350` dans NODE_OPTIONS (avec ESM stubs, Hack #19+20)
 
 ### openclaw doctor / config qui se bloque
 **Symptôme :** La commande hang indéfiniment
@@ -772,19 +798,32 @@ adb shell "run-as com.termux sh -c 'export PREFIX=/data/data/com.termux/files/us
 
 ## Ce Qui Reste à Faire
 
-1. ~~Résoudre le bypass systemd (Hack #12)~~ ✅ FAIT
-2. ~~Tester le gateway sur le port 9000~~ ✅ FAIT
-3. ~~Résoudre internet depuis proot (Hack #13)~~ ✅ FAIT — ne pas tuer GMS
-4. ~~Activer le plugin Telegram (Hack #14)~~ ✅ FAIT
-5. ~~IPv6 DNS + autoSelectFamily (Hack #15)~~ ✅ FAIT
-6. ~~Bot Telegram connecté~~ ✅ FAIT — `@pocketclawbot` en long polling
-7. ~~Fixer IPv4 + provider~~ ✅ FAIT — reboot téléphone + Kimi Coding (Hack #16)
-8. ~~Premier message agent complet~~ ✅ FAIT — bot répond sur Telegram !
-9. ~~Termux:Boot auto-start~~ ✅ FAIT — Hack #17, script de boot installé
-10. **Test autonomie placard** — débrancher du PC, laisser 1h+ sur WiFi/batterie, vérifier que le bot répond
-11. **Stabilité 24h** — vérifier que le gateway survit une nuit sans OOM kill
-12. **Script watchdog** — auto-restart si le gateway crash
-13. **Créer le repo PocketClaw** — publier sur GitHub avec README + STORY + scripts
+### Fait
+1. ~~Résoudre le bypass systemd (Hack #12)~~ ✅
+2. ~~Tester le gateway sur le port 9000~~ ✅
+3. ~~Résoudre internet depuis proot (Hack #13)~~ ✅
+4. ~~Activer le plugin Telegram (Hack #14)~~ ✅
+5. ~~IPv6 DNS + autoSelectFamily (Hack #15)~~ ✅
+6. ~~Bot Telegram connecté~~ ✅ — `@pocketclawbot` en long polling
+7. ~~Fixer IPv4 + provider Kimi Coding (Hack #16)~~ ✅
+8. ~~Premier message agent complet~~ ✅ — bot répond sur Telegram
+9. ~~Termux:Boot auto-start (Hack #17)~~ ✅
+10. ~~Compile cache cleanup (Hack #18)~~ ✅
+11. ~~ESM stubs (Hack #19)~~ ✅ — 9 packages stubbés, 13 supprimés
+12. ~~Heap 350 Mo (Hack #20)~~ ✅
+13. ~~Script watchdog~~ ✅ — watchdog loop + healthcheck cron
+14. ~~Log rotation~~ ✅ — cron toutes les heures
+15. ~~CLI `pocketclaw`~~ ✅ — start/stop/restart/status/logs/monitor
+16. ~~Créer le repo PocketClaw~~ ✅ — sur GitHub
+17. ~~Nettoyage npm (262 Mo)~~ ✅ — node_modules 413 → 151 Mo
+
+### Reste à faire
+- **Stabilité 24h** — laisser tourner une nuit complète, vérifier les logs
+- **Deploy config live** — Groq fallback, identity/personnalité, customCommands (seulement dans l'example JSON, pas sur le phone)
+- **Fix API keys dans `ps`** — les clés sont visibles dans la ligne de commande proot (security concern)
+- **Root le téléphone** — plus gros gain restant : freeze GMS = -260 Mo RAM
+- **Test sans proot après root** — Node 22 fonctionne via `ld-linux-armhf.so.3`, mais proot coûte du CPU
+- **Considérer rendre le repo public**
 
 ---
 
@@ -822,4 +861,4 @@ adb shell "run-as com.termux sh -c 'export PREFIX=/data/data/com.termux/files/us
 
 *"On m'a dit que c'était impossible, alors je l'ai fait." — Probablement pas Einstein, mais on s'en fout.*
 
-*Total : ~5 heures du premier `pkg install` au premier message IA reçu sur Telegram. 20 hacks. 0€ de hardware. Un Moto E2 de 2015 qui fait tourner un agent IA autonome en 2026.*
+*Total : ~5 heures du premier `pkg install` au premier message IA reçu sur Telegram. 20 hacks. 0€ de hardware. Un Moto E2 de 2015 qui fait tourner un agent IA autonome en 2026. 183 Mo de RSS au lieu de 224 Mo, 151 Mo de node_modules au lieu de 413 Mo.*

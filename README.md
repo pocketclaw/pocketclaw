@@ -51,7 +51,7 @@ Bot:     "I'm running on a Moto E2 from 2015 with 1GB of RAM.
 - **Voice messages** — send a voice note, get a text reply (via OpenAI Whisper)
 - **Fully autonomous** — watchdog + health checks auto-restart on crash or freeze, survives reboots
 - **`pocketclaw` CLI** — `start`, `stop`, `restart`, `status`, `logs`, `monitor` from one command
-- **RAM-optimized** — runs in 384 MB V8 heap with periodic GC on hardware that has 1 GB total
+- **RAM-optimized** — runs in 350 MB V8 heap with periodic GC and ESM stubs on hardware that has 1 GB total
 - **20 documented hacks** — every impossible problem we hit, and how we solved it
 
 ## The Hardware
@@ -107,24 +107,24 @@ Every version squeezed more out of the same hardware:
 
 | | **v0** Initial | **v1** Hacks | **v2** Optim | **v3** Stubs |
 |---|---|---|---|---|
-| **Gateway RSS** | ~224 MB | ~224 MB | 233 MB | **196 MB** |
+| **Gateway RSS** | ~224 MB | ~224 MB | 233 MB | **183 MB** |
 | **V8 heap** | 384 MB | 384 MB | 384 MB | **350 MB** |
 | **Periodic GC** | - | - | 60s, ~11 MB/cycle | 60s, ~11 MB/cycle |
-| **ESM stubs** | - | - | - | **6 packages stubbed** |
-| **node_modules** | 413 MB | 413 MB | 413 MB | **~230 MB** |
-| **Disk free** | ~100 MB | ~120 MB | 148 MB | **332 MB** |
+| **ESM stubs** | - | - | - | **9 packages stubbed** |
+| **node_modules** | 413 MB | 413 MB | 413 MB | **151 MB** |
+| **Disk free** | ~100 MB | ~120 MB | 148 MB | **471 MB** |
 | **Crash recovery** | manual | watchdog loop | + healthcheck cron | + healthcheck cron |
 | **Monitoring** | - | - | CSV every 5 min | CSV every 5 min |
 
-**Total gains v0 → v3:** -28 MB RSS (-12.5%), +232 MB disk, -183 MB node_modules (-44%), fully autonomous.
+**Total gains v0 → v3:** -41 MB RSS (-18%), +371 MB disk, -262 MB node_modules (-63%), fully autonomous.
 
 ### Memory budget
 
 | Component | RAM | Notes |
 |---|---|---|
 | Android + GMS | ~430 MB | Not rootable — Google Play Services can't be frozen |
-| OpenClaw gateway | ~196 MB | Telegram only, ESM stubs for unused channels |
-| V8 heap headroom | ~154 MB | Boot peak needs ~340 MB, then settles to ~196 MB |
+| OpenClaw gateway | ~183 MB | Telegram only, ESM stubs for unused channels/providers |
+| V8 heap headroom | ~167 MB | Boot peak needs ~340 MB, then settles to ~183 MB |
 | **Total needed** | **~780 MB** | On 920 MB total — 140 MB margin |
 
 ### What we tuned
@@ -133,10 +133,11 @@ Every version squeezed more out of the same hardware:
 |---|---|
 | `--max-old-space-size=350` | Caps V8 heap. 256/320 OOM at boot, 350 is the minimum with stubs. |
 | `--expose-gc` + periodic GC | Explicit `global.gc()` every 60s frees ~10 MB per cycle |
-| ESM stub packages | Replace 6 unused SDKs (Slack, Discord, LINE, WhatsApp, Playwright) with empty ESM exports. 6 MB vs 70 MB on disk, -25 MB RSS. |
+| ESM stub packages | Replace 9 unused SDKs (Slack, Discord, LINE, WhatsApp, Playwright, AWS Bedrock, Google Gemini) with empty ESM exports. Saves ~40 MB RSS and 262 MB disk. |
 | Kill GMS sub-processes at startup | Frees ~50-100 MB temporarily (they respawn slowly) |
 | Compile cache | Node 22's bytecode cache, faster cold starts |
 | Concurrency limits | `maxConcurrency: 1`, `maxQueueSize: 2` — no parallel requests |
+| npm package cleanup | Delete 13 packages with 0 imports (types, build tools, unused SDKs) — saves 262 MB disk |
 | npm cache cleanup | Clear `~/.npm/` after installs — saves ~220 MB disk |
 
 ### What we tested and ruled out
@@ -145,7 +146,7 @@ Every version squeezed more out of the same hardware:
 |---|---|
 | V8 startup snapshot (`--build-snapshot`) | Builds OK (5 MB blob) but ESM restore fails: `ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING` |
 | CJS module stubs (block `require()`) | OpenClaw is 100% ESM bundled by Rolldown — 0 CJS `require()` calls to intercept |
-| Delete unused npm packages | ESM resolves all imports at link-time, even if code paths are never reached. Deleting packages breaks boot. Stubs are the fix. |
+| Delete unused npm packages | ESM resolves all imports at link-time, even if code paths are never reached. Deleting *imported* packages breaks boot — stubs are the fix. Packages with 0 imports (types, build tools, unused SDKs) can be safely deleted. |
 | Running without proot | Node v22 works via `ld-linux-armhf.so.3` trick, but no RAM savings (same V8 heap) |
 | `--optimize-for-size` | Not allowed in `NODE_OPTIONS` (Node 22 restriction) |
 | `--jitless` | Works but -6 to -40% CPU perf — not worth it on slow hardware |
@@ -162,9 +163,9 @@ $ pocketclaw status
 Gateway:  RUNNING (PID 12345)
 Uptime:   up 3 days, 2:15
 RAM:      370MB available / 898MB total
-Gateway:  196MB RSS
+Gateway:  183MB RSS
 Swap:     45MB used (swappiness=100)
-Disk:     332MB free
+Disk:     471MB free
 Battery:  87%, 31.2°C
 Crons:    2 active
 ```
@@ -255,7 +256,7 @@ cp /sdcard/Download/restart-gw.sh $PREFIX/bin/restart-gw
 cp /sdcard/Download/run-proot.sh $PREFIX/bin/run-proot
 chmod +x $PREFIX/bin/start-openclaw $PREFIX/bin/restart-gw $PREFIX/bin/run-proot
 
-# Create ESM stubs (saves 25 MB RAM + 64 MB disk)
+# Create ESM stubs (saves ~40 MB RAM + 262 MB disk)
 bash /sdcard/Download/create-stubs.sh
 
 # Install proot files
@@ -389,7 +390,7 @@ OpenClaw works with **30+ providers** out of the box. Just change the provider, 
 | `plugins.entries.telegram.enabled: true` | **Required.** Without this, Telegram won't load even if `channels.telegram` is configured. |
 | `reasoning: false` | Prevents extended thinking mode that can cause empty responses. |
 | `network.autoSelectFamily: true` | Enables dual-stack IPv4/IPv6 for better connectivity. |
-| `--max-old-space-size=350` | Caps V8 heap to 350 MB. 256/320 OOM at boot — 350 works with ESM stubs. |
+| `--max-old-space-size=350` | Caps V8 heap to 350 MB. 256/320 OOM at boot, 384 without stubs — 350 works with ESM stubs. |
 | `--expose-gc` | Enables `global.gc()`. Combined with hijack.js timer, frees ~10 MB every 60s. |
 | `maxConcurrency: 1` | One request at a time. More would OOM on 1 GB RAM. |
 
@@ -438,7 +439,7 @@ rm -f $ROOTFS/tmp/openclaw/*.lock
 <details>
 <summary><b>Out of memory / phone freezes</b></summary>
 
-- Verify `--max-old-space-size=384` is in NODE_OPTIONS
+- Verify `--max-old-space-size=350` is in NODE_OPTIONS
 - Kill unnecessary apps: `am force-stop <package>`
 - **Never kill** `com.google.android.gms` (breaks WiFi)
 </details>
@@ -480,7 +481,7 @@ pocketclaw/
     ├── healthcheck.sh             # Cron: restart gateway if unresponsive (every 2 min)
     ├── logrotate.sh               # Cron: trim logs and CSV to 24h (every hour)
     ├── monitor.sh                 # Background: log RAM/CPU/disk/battery to CSV
-    ├── create-stubs.sh            # Replace unused channel SDKs with ESM stubs (-25 MB RSS)
+    ├── create-stubs.sh            # Replace unused SDKs with ESM stubs (-40 MB RSS, -262 MB disk)
     └── hijack.js                  # Runtime patch: fix os.networkInterfaces + periodic GC
 ```
 
