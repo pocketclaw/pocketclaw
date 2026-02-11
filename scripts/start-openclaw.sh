@@ -12,10 +12,15 @@ export OPENAI_API_KEY
 
 termux-wake-lock 2>/dev/null
 
-# Free RAM: kill heavy Android processes (do NOT kill com.google.android.gms)
+# Free RAM: kill non-essential processes
+# NEVER kill com.google.android.gms or com.google.android.gms.persistent (WiFi depends on them)
 am force-stop com.google.android.inputmethod.latin 2>/dev/null
 am force-stop android.process.media 2>/dev/null
 am force-stop android.process.acore 2>/dev/null
+# Kill GMS sub-processes that don't manage connectivity
+am kill com.google.android.gms.unstable 2>/dev/null
+am kill com.google.android.gms:snet 2>/dev/null
+am kill com.google.android.gms.ui 2>/dev/null
 
 echo "Starting OpenClaw gateway with watchdog..."
 echo "Port: 9000"
