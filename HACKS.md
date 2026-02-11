@@ -549,7 +549,14 @@ pm uninstall -k --user 0 com.android.backupconfirm               # confirmation 
 # Échoué : com.motorola.ccc.devicemanagement (DELETE_FAILED_DEVICE_POLICY_MANAGER)
 ```
 
-**Total : 28 packages supprimés** (12 + 16). Seuls 2 ont résisté : `com.google.android.gms` et `com.motorola.ccc.devicemanagement` (tous deux Device Policy Manager).
+```bash
+# Vague 3 — 3 packages finaux :
+pm uninstall -k --user 0 fr.neamar.kiss                          # KISS launcher (53 Mo, inutile — tout via SSH/Telegram)
+pm uninstall -k --user 0 com.google.android.gsf                  # Google Services Framework (tue gapps, -41 Mo)
+pm uninstall -k --user 0 com.android.location.fused              # location fused
+```
+
+**Total : 31 packages supprimés** (12 + 16 + 3). Seuls 2 résistent : `com.google.android.gms` et `com.motorola.ccc.devicemanagement` (Device Policy Manager).
 
 **Incident vague 1 :** Pendant les uninstalls, le routage WiFi a été perdu temporairement (même symptôme que Hack #13). `svc wifi disable && svc wifi enable` n'a pas restauré la route. Recovery : `adb reboot`.
 
@@ -570,7 +577,7 @@ com.google.android.gsf, com.google.android.gms,
 com.motorola.ccc.devicemanagement
 ```
 
-**Statut : ⚠️ PARTIEL — 28 packages supprimés, GMS intouchable sans root**
+**Statut : ⚠️ PARTIEL — 31 packages supprimés, GMS intouchable sans root**
 
 ### Hack #22 — Static IP + GMS Kill (le dernier mur)
 **Problème :** GMS mange ~270 Mo de RAM (gms.persistent 136 Mo + gms 133 Mo). Le tuer coupe le WiFi (Hack #13) parce que GMS gère le routage DHCP.
@@ -630,8 +637,8 @@ PATH=/system/bin:$PATH am force-stop com.google.android.gms
 
 | Mode | RAM utilisée | RAM libre |
 |---|---|---|
-| USB + kills ADB | ~356 Mo | ~564 Mo (61%) |
-| Autonome (GMS respawn) | ~626 Mo | ~294 Mo (32%) |
+| USB + kills ADB | ~263 Mo | ~657 Mo (71%) |
+| Autonome (GMS respawn) | ~522 Mo | ~398 Mo (43%) |
 
 **Fix définitif : root.** Avec root, `am force-stop` fonctionne depuis n'importe quel uid, et on peut `pm uninstall --user 0 com.google.android.gms` (plus de Device Policy Manager restriction).
 
@@ -813,7 +820,7 @@ export NODE_OPTIONS='-r /root/hijack.js --expose-gc --max-old-space-size=192'
 | Log rotation | ✅ | Cron toutes les heures |
 | Periodic GC | ✅ | `global.gc()` toutes les 60s via hijack.js |
 | IPv6 DNS | ✅ | Hack #15 |
-| Android debloat | ⚠️ | 28 packages supprimés, GMS intouchable sans root (Hack #21) |
+| Android debloat | ⚠️ | 31 packages supprimés (dont launcher), GMS intouchable sans root (Hack #21) |
 | GMS kill (static IP) | ⚠️ | Fonctionne depuis ADB, pas depuis Termux (Hack #22) |
 | API keys sécurisées | ✅ | Chargées depuis env file, invisibles dans `ps` (Hack #23) |
 
@@ -995,7 +1002,7 @@ adb shell "run-as com.termux sh -c 'export PREFIX=/data/data/com.termux/files/us
 15. ~~CLI `pocketclaw`~~ ✅ — start/stop/restart/status/logs/monitor
 16. ~~Créer le repo PocketClaw~~ ✅ — sur GitHub
 17. ~~Nettoyage npm (262 Mo)~~ ✅ — node_modules 413 → 151 Mo
-18. ~~Android debloat (Hack #21)~~ ✅ — 28 packages supprimés (permanent)
+18. ~~Android debloat (Hack #21)~~ ✅ — 31 packages supprimés (permanent, dont launcher + GSF)
 19. ~~Static IP + GMS kill (Hack #22)~~ ⚠️ — fonctionne depuis ADB, bloqué depuis Termux (uid 10001)
 20. ~~API keys sécurisées (Hack #23)~~ ✅ — chargées depuis env file, invisibles dans `ps`
 
@@ -1042,4 +1049,4 @@ adb shell "run-as com.termux sh -c 'export PREFIX=/data/data/com.termux/files/us
 
 *"On m'a dit que c'était impossible, alors je l'ai fait." — Probablement pas Einstein, mais on s'en fout.*
 
-*Total : ~5 heures du premier `pkg install` au premier message IA reçu sur Telegram. 23 hacks. 0€ de hardware. Un Moto E2 de 2015 qui fait tourner un agent IA autonome en 2026. 176 Mo de RSS au lieu de 224 Mo, 151 Mo de node_modules au lieu de 413 Mo, 28 packages Android supprimés, 294 Mo libres en autonome (564 Mo avec USB kills).*
+*Total : ~5 heures du premier `pkg install` au premier message IA reçu sur Telegram. 23 hacks. 0€ de hardware. Un Moto E2 de 2015 qui fait tourner un agent IA autonome en 2026. 176 Mo de RSS au lieu de 224 Mo, 151 Mo de node_modules au lieu de 413 Mo, 31 packages Android supprimés, ~400 Mo libres en autonome (657 Mo avec USB kills).*
