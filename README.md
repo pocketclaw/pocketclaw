@@ -48,7 +48,8 @@ Bot:     "I'm running on a Moto E2 from 2015 with 1GB of RAM.
 
 - **A Telegram bot** running 24/7 on a phone that belongs in a museum
 - **Any AI you want** — works with any OpenAI-compatible provider (see [Pick Your AI](#-pick-your-ai))
-- **Fully autonomous** — auto-restarts on boot, works on any WiFi
+- **Voice messages** — send a voice note, get a text reply (via OpenAI Whisper)
+- **Fully autonomous** — watchdog auto-restarts on crash, survives reboots and sleep
 - **17 documented hacks** — every impossible problem we hit, and how we solved it
 
 ## The Hardware
@@ -202,9 +203,12 @@ cat > $ROOTFS/root/.openclaw/env << EOF
 KIMI_API_KEY=sk-kimi-YOUR_ACTUAL_KEY
 MOONSHOT_API_KEY=sk-kimi-YOUR_ACTUAL_KEY
 TELEGRAM_BOT_TOKEN=1234567890:YOUR_ACTUAL_TOKEN
+OPENAI_API_KEY=sk-proj-YOUR_ACTUAL_KEY
 EOF
 chmod 600 $ROOTFS/root/.openclaw/env
 ```
+
+> **OPENAI_API_KEY is optional** — only needed for voice message transcription (Whisper). The bot works fine without it, you just won't be able to send voice notes.
 
 ### Step 9 — Launch
 
@@ -235,6 +239,21 @@ chmod +x ~/.termux/boot/start-openclaw.sh
 ```
 
 Now unplug the phone. Put it in a drawer. It restarts everything on its own after a reboot.
+
+### Step 11 — Harden for 24/7 (recommended)
+
+The phone will sleep with the screen off. These settings keep WiFi and Termux alive in the background:
+
+```bash
+# On your PC, via ADB — run once
+adb shell settings put global wifi_sleep_policy 2          # WiFi never sleeps
+adb shell dumpsys deviceidle whitelist +com.termux         # Exempt Termux from Doze
+adb shell dumpsys deviceidle disable                       # Disable Doze entirely
+```
+
+> **Don't disable screen sleep.** The phone should go to sleep normally — WiFi stays on, Termux runs in the background, and the watchdog restarts the gateway if it ever crashes.
+
+The `start-openclaw` script includes a **watchdog loop**: if the gateway dies (network error, OOM, etc.), it waits 10 seconds, cleans lock files, and restarts automatically. No manual intervention needed.
 
 ---
 
@@ -343,6 +362,15 @@ rm -f $ROOTFS/tmp/openclaw/*.lock
 </details>
 
 <details>
+<summary><b>Gateway crashes with "ENETUNREACH" or "fetch failed"</b></summary>
+
+The phone lost network briefly. The watchdog in `start-openclaw` auto-restarts the gateway after 10 seconds. If it keeps happening:
+- Check WiFi is stable
+- Verify `wifi_sleep_policy` is set to `2` (never sleep)
+- Make sure Doze is disabled: `adb shell dumpsys deviceidle disable`
+</details>
+
+<details>
 <summary><b>Can't kill processes from ADB shell</b></summary>
 
 ADB runs as UID `shell`, can't signal Termux processes. Kill from Termux or SSH instead.
@@ -362,7 +390,7 @@ pocketclaw/
 │   ├── openclaw.example.json      # Working config (copy & fill in keys)
 │   └── env.example                # API key template
 └── scripts/
-    ├── start-openclaw.sh          # Gateway launcher
+    ├── start-openclaw.sh          # Gateway launcher with watchdog loop
     ├── restart-gw.sh              # Clean kill + restart
     ├── run-proot.sh               # Run commands inside proot
     ├── boot-openclaw.sh           # Termux:Boot auto-start
