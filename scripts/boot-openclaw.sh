@@ -7,6 +7,9 @@ PREFIX=/data/data/com.termux/files/usr
 # Wait for WiFi to connect
 sleep 15
 
+# NOTE: boot-debloat requires ADB shell (Dirty COW can't open /system/bin/run-as from Termux).
+# After reboot with USB connected, run: adb shell /data/local/tmp/boot-debloat.sh
+
 # Start SSH server
 sshd
 

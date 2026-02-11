@@ -2,9 +2,15 @@
 config/env
 *.env
 !config/env.example
+backup/
 
 # Logs
 *.log
+
+# APK build artifacts
+apk/build/
+apk/*.apk
+*.keystore
 
 # OS
 .DS_Store

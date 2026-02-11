@@ -21,9 +21,9 @@
 
 ---
 
-**They said it couldn't be done. 20 hacks later, it's running.**
+**They said it couldn't be done. 30 hacks later, it's running.**
 
-[Setup Guide](#-setup-guide) · [The 20 Hacks](HACKS.md) · [Troubleshooting](#-troubleshooting) · [Contributing](CONTRIBUTING.md)
+[Setup Guide](#-setup-guide) · [The 30 Hacks](HACKS.md) · [Troubleshooting](#-troubleshooting) · [Contributing](CONTRIBUTING.md)
 
 </div>
 
@@ -51,8 +51,10 @@ Bot:     "I'm running on a Moto E2 from 2015 with 1GB of RAM.
 - **Voice messages** — send a voice note, get a text reply (via OpenAI Whisper)
 - **Fully autonomous** — watchdog + health checks auto-restart on crash or freeze, survives reboots
 - **`pocketclaw` CLI** — `start`, `stop`, `restart`, `status`, `logs`, `monitor` from one command
-- **RAM-optimized** — 178 MB RSS with V8 heap 192 MB, periodic GC, and ESM stubs on hardware that has 1 GB total
-- **20 documented hacks** — every impossible problem we hit, and how we solved it
+- **RAM-optimized** — 178 MB RSS with V8 heap 128 MB, periodic GC, ESM stubs, and a live dashboard — on hardware that has 1 GB total
+- **30 documented hacks** — every impossible problem we hit, and how we solved it
+- **Live dashboard** — CRT-style status page on the phone screen (Gateway, WiFi, RAM, Telegram, errors — auto-refresh every 3s)
+- **Custom launcher APK** — 8.5 KB WebView app replaces the home screen with the dashboard
 
 ## The Hardware
 
@@ -105,26 +107,29 @@ Running a modern AI gateway on 1 GB RAM requires aggressive optimization. Here's
 
 Every version squeezed more out of the same hardware:
 
-| | **v0** Initial | **v1** Hacks | **v2** Optim | **v3** Stubs+Heap |
-|---|---|---|---|---|
-| **Gateway RSS** | ~224 MB | ~224 MB | 233 MB | **~178 MB** |
-| **V8 heap** | 384 MB | 384 MB | 384 MB | **192 MB** |
-| **Periodic GC** | - | - | 60s, ~11 MB/cycle | 60s, ~11 MB/cycle |
-| **ESM stubs** | - | - | - | **9 packages stubbed** |
-| **node_modules** | 413 MB | 413 MB | 413 MB | **151 MB** |
-| **Disk free** | ~100 MB | ~120 MB | 148 MB | **471 MB** |
-| **Crash recovery** | manual | watchdog loop | + healthcheck cron | + healthcheck cron |
-| **Monitoring** | - | - | CSV every 5 min | CSV every 5 min |
+| | **v0** Initial | **v1** Hacks | **v2** Optim | **v3** Stubs+Heap | **v4** Dashboard+Debloat |
+|---|---|---|---|---|---|
+| **Gateway RSS** | ~224 MB | ~224 MB | 233 MB | ~178 MB | **~178 MB** |
+| **V8 heap** | 384 MB | 384 MB | 384 MB | 192 MB | **128 MB** |
+| **Periodic GC** | - | - | 60s, ~11 MB/cycle | 60s, ~11 MB/cycle | 60s, ~11 MB/cycle |
+| **ESM stubs** | - | - | - | 9 packages stubbed | 9 packages stubbed |
+| **Packages disabled** | - | - | - | 31 (pm uninstall) | **51+ (pm disable via Dirty COW)** |
+| **node_modules** | 413 MB | 413 MB | 413 MB | 151 MB | 151 MB |
+| **Disk free** | ~100 MB | ~120 MB | 148 MB | 471 MB | 471 MB |
+| **Crash recovery** | manual | watchdog loop | + healthcheck cron | + healthcheck cron | + healthcheck cron |
+| **Dashboard** | - | - | - | - | **CRT-style on phone screen** |
+| **Launcher** | stock | stock | KISS | KISS | **PocketClaw APK (8.5 KB)** |
+| **Monitoring** | - | - | CSV every 5 min | CSV every 5 min | CSV + live /api/status |
 
-**Total gains v0 → v3:** -46 MB RSS (-21%), +371 MB disk, -262 MB node_modules (-63%), heap 384→192 (-50%), fully autonomous.
+**Total gains v0 → v4:** -46 MB RSS (-21%), +371 MB disk, -262 MB node_modules (-63%), heap 384→128 (-67%), 51+ packages disabled, live dashboard, custom launcher APK.
 
 ### Memory budget
 
 | Component | RAM | Notes |
 |---|---|---|
-| Android + GMS | ~430 MB | Not rootable — Google Play Services can't be frozen |
-| OpenClaw gateway | ~178 MB | Telegram only, ESM stubs, heap 192 MB |
-| **Total needed** | **~608 MB** | On 920 MB total — **312 MB margin** |
+| Android (51+ disabled) | ~280 MB | Dirty COW + pm disable, GMS frozen on boot via ADB |
+| OpenClaw gateway | ~178 MB | Telegram + dashboard, ESM stubs, heap 128 MB |
+| **Total needed** | **~458 MB** | On 920 MB total — **462 MB margin** |
 
 **With root (freeze GMS):**
 
@@ -139,7 +144,7 @@ Every version squeezed more out of the same hardware:
 
 | Optimization | Impact |
 |---|---|
-| `--max-old-space-size=192` | Caps V8 heap. Binary search found OOM at 96, min 128, prod safe at 192. RSS ~178 MB regardless. |
+| `--max-old-space-size=128` | Caps V8 heap. Binary search found OOM at 96, stable at 128. RSS ~178 MB regardless. |
 | `--expose-gc` + periodic GC | Explicit `global.gc()` every 60s frees ~10 MB per cycle |
 | ESM stub packages | Replace 9 unused SDKs (Slack, Discord, LINE, WhatsApp, Playwright, AWS Bedrock, Google Gemini) with empty ESM exports. Saves ~40 MB RSS and 262 MB disk. |
 | Kill GMS sub-processes at startup | Frees ~50-100 MB temporarily (they respawn slowly) |
@@ -172,7 +177,7 @@ Gateway:  RUNNING (PID 12345)
 Uptime:   up 3 days, 2:15
 RAM:      370MB available / 898MB total
 Gateway:  178MB RSS
-Swap:     45MB used (swappiness=100)
+Swap:     26MB used (swappiness=100)
 Disk:     471MB free
 Battery:  87%, 31.2°C
 Crons:    2 active
@@ -474,7 +479,7 @@ ADB runs as UID `shell`, can't signal Termux processes. Kill from Termux or SSH 
 ```
 pocketclaw/
 ├── README.md                      # You are here
-├── HACKS.md                       # The 20 hacks — the full war story
+├── HACKS.md                       # The 30 hacks — the full war story
 ├── CONTRIBUTING.md                 # How to contribute
 ├── LICENSE                         # MIT
 ├── config/
@@ -490,7 +495,11 @@ pocketclaw/
     ├── logrotate.sh               # Cron: trim logs and CSV to 24h (every hour)
     ├── monitor.sh                 # Background: log RAM/CPU/disk/battery to CSV
     ├── create-stubs.sh            # Replace unused SDKs with ESM stubs (-40 MB RSS, -262 MB disk)
+    ├── boot-debloat.sh            # ADB-side: Dirty COW + pm disable 51+ packages
     └── hijack.js                  # Runtime patch: fix os.networkInterfaces + periodic GC
+├── apk/
+│   ├── AndroidManifest.xml           # Launcher APK manifest (HOME intent)
+│   └── src/.../LauncherActivity.java # WebView → localhost:9000/dashboard
 ```
 
 ### On the phone
@@ -504,6 +513,11 @@ $PREFIX/bin/
   ├── healthcheck          # → scripts/healthcheck.sh  (cron every 2 min)
   └── logrotate-pc         # → scripts/logrotate.sh    (cron every hour)
 
+/data/local/tmp/
+  ├── dirtycow              # Dirty COW exploit binary
+  ├── run-as-payload        # Payload for run-as replacement
+  └── boot-debloat.sh       # → scripts/boot-debloat.sh
+
 $ROOTFS/root/
   ├── hijack.js            # → scripts/hijack.js
   └── .openclaw/
@@ -516,9 +530,9 @@ $ROOTFS/root/
 
 ---
 
-## 🤝 The 20 Hacks
+## 🤝 The 30 Hacks
 
-Every single problem we hit — and the hack that fixed it. From proot crashes to User-Agent spoofing to discovering that killing Google Play Services permanently breaks WiFi.
+Every single problem we hit — and the hack that fixed it. From proot crashes to User-Agent spoofing to discovering that killing Google Play Services permanently breaks WiFi. From a boot loop fixed by a 2232-byte kernel exploit to a CRT dashboard running in a WebView.
 
 **[Read the full story →](HACKS.md)**
 
@@ -557,7 +571,7 @@ MIT — do whatever you want with it.
 
 **Built with stubbornness on a mass of impossible constraints.**
 
-*A phone from 2015. 1GB of RAM. 20 hacks.*<br>
+*A phone from 2015. 1GB of RAM. 30 hacks.*<br>
 *If it can run AI, anything can.*
 
 **[Star this repo](https://github.com/MonteiroRobin/pocketclaw)** if you think old phones deserve a second life.
