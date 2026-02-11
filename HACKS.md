@@ -1,6 +1,6 @@
 # PocketClaw — OpenClaw sur un Moto E2 (The Impossible Install)
 
-> "They said it couldn't be done. We did it anyway. 36 hacks later."
+> "They said it couldn't be done. We did it anyway. 39 hacks later."
 
 **Date :** 10-11 février 2026
 **Appareil :** Motorola Moto E2 (2015) — codename `surnia`/`otis`
@@ -1446,6 +1446,71 @@ name = name
 
 ---
 
+### Hack #37 — Deep Rootfs Diet (550 MB → 498 MB)
+
+**Problem:** After Hack #34's first diet (741→550 MB), still had 50+ MB of unused system libraries.
+
+**Solution:** Identified and removed:
+- gconv charset modules: **21 MB** — Node.js uses ICU internally, not glibc gconv
+- perl-base: **6.6 MB** — OpenClaw is pure JavaScript
+- systemd (both locations): **12 MB** — proot doesn't run systemd
+- PAM security modules: **3.7 MB** — proot doesn't do auth
+- gstreamer, packagekit, polkit, iso-codes, xml, etc.: ~7 MB
+
+**Result:** 498 MB rootfs. 715 MB disk free. Total diet: 741 → 498 MB (**-243 MB, -33%**).
+
+**What we kept:** libc, libssl, libz, libstdc++ (Node.js needs them), ca-certificates (TLS), apt (for updates).
+
+**Status: OK — gateway runs fine, all 243 MB recovered from original rootfs**
+
+---
+
+### Hack #38 — Setup Wizard (/setup)
+
+**Problem:** Setting up PocketClaw requires SSH + editing JSON config files + creating env files. No normal person can do this.
+
+**Solution:** Web-based setup wizard at `localhost:9000/setup`, built into hijack.js:
+- **Step 1:** Choose channel — Telegram (+35 MB) or Discord (+60 MB)
+- **Step 2:** Choose AI provider — Kimi (free), Groq (free tier), or OpenAI (paid)
+- **Step 3:** Enter bot token + API key
+- **Step 4:** Click DEPLOY → writes `openclaw.json` + `env`, restarts gateway
+
+Same green CRT theme as dashboard. Works from the phone browser OR from any device on the same WiFi. Zero SSH, zero terminal.
+
+The setup writes the complete OpenClaw config including provider definition, channel config, identity/personality, and environment variables (chmod 600). Then triggers `process.exit(0)` — the watchdog loop in `start-openclaw` auto-restarts with the new config.
+
+**Status: OK — /setup returns 200, /dashboard + /api/status still work**
+
+---
+
+### Hack #39 — One-Liner Installer (install.sh)
+
+**Problem:** Installing PocketClaw requires ~20 manual steps: Termux packages, proot, Node.js, OpenClaw, config files, scripts, crons, boot setup. Nobody will do all that.
+
+**Solution:** `install.sh` — run from Termux, does everything:
+```bash
+curl -sL https://raw.githubusercontent.com/MonteiroRobin/pocketclaw/main/install.sh | bash
+```
+
+The script:
+1. Pre-flight checks (Termux, WiFi, RAM ≥512 MB, disk ≥800 MB)
+2. Installs packages (proot-distro, openssh, busybox)
+3. Sets up proot Ubuntu
+4. Downloads & installs Node.js 22 (auto-detects ARM/ARM64/x64)
+5. Installs OpenClaw via npm
+6. Deploys hijack.js from GitHub
+7. Generates all scripts (start-openclaw, restart-gw, healthcheck, logrotate, pocketclaw CLI)
+8. Auto-sizes V8 heap based on phone RAM (128/256/384 MB)
+9. Configures boot auto-start + crons
+10. Strips ~200 MB of proot bloat
+11. Starts gateway and prints setup URL
+
+At the end: "Open http://localhost:9000/setup" — the setup wizard handles the rest.
+
+**Status: WRITTEN — needs testing on a fresh phone**
+
+---
+
 *"On m'a dit que c'était impossible, alors je l'ai fait." — Probablement pas Einstein, mais on s'en fout.*
 
-*Total : ~9 heures du premier `pkg install` au dashboard natif sur l'écran d'accueil. 36 hacks. 0 EUR de hardware. Un Moto E2 de 2015 qui fait tourner un agent IA autonome en 2026 avec dashboard CRT green, breakdown RAM par process, un APK natif de 12.6 KB, et 663 MB libres sur le disque.*
+*Total : ~10 heures. 39 hacks. 0 EUR de hardware. Un Moto E2 de 2015 transformé en PocketClaw OS : agent IA autonome, dashboard CRT green, setup wizard web, installer one-liner, 715 MB libres sur le disque. De PoC à produit installable.*
