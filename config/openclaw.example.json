@@ -47,9 +47,9 @@
         "primary": "kimi-coding/kimi-for-coding",
         "fallbacks": ["groq/llama-3.3-70b-versatile"]
       },
-      "maxConcurrent": 4,
+      "maxConcurrent": 1,
       "subagents": {
-        "maxConcurrent": 8
+        "maxConcurrent": 2
       }
     },
     "list": [
