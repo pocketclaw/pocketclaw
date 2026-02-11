@@ -17,32 +17,42 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 
 public class LauncherActivity extends Activity {
-    private TextView lobsterView, statusView;
+    private TextView crabView, statusView;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Runnable fetchTask = this::fetchLoop;
     private int frame = 0;
 
-    private static final String[] LOBSTER = {
-        "      )\\.----./(\n" +
-        "     /( o    o )\\\n" +
-        "    /  |\\    /|  \\\n" +
-        "    \\ /  \\--/  \\ /\n" +
-        "     V  /(  )\\  V\n" +
-        "     | |  ()  | |\n" +
-        "     |  '----'  |\n" +
-        "     | /||  ||\\ |\n" +
-        "     |/ ||  || \\|\n" +
-        "        ^^  ^^",
-        "      )(.----.)(\n" +
-        "     /( o    o )\\\n" +
-        "    /  |\\    /|  \\\n" +
-        "    \\ /  \\--/  \\ /\n" +
-        "     V  /(  )\\  V\n" +
-        "     | |  ()  | |\n" +
-        "     |  '----'  |\n" +
-        "     | /||  ||\\ |\n" +
-        "     |/ ||  || \\|\n" +
-        "        ^^  ^^"
+    private static final String[] CRAB = {
+        "        __            __\n" +
+        "       / <`          '> \\\n" +
+        "      (  / @        @ \\  )\n" +
+        "       \\(_ _\\  .--.  /_ _)/\n" +
+        "     (\\ `-/  .'  '.  \\-' /)\n" +
+        "      \"===\\ / .::. \\ /===\"\n" +
+        "       .==')(.:::::.)(`==.\n" +
+        "      ' .='  ':::::' `=. '\n" +
+        "     /  / .::::::::::. \\  \\\n" +
+        "    |  | (::::::::::::) |  |\n" +
+        "     \\  \\ '::::::::::' /  /\n" +
+        "      \\  \\  |  ||  |  /  /\n" +
+        "       \\  \\ |  ||  | /  /\n" +
+        "        '-.\\|__||__|/.-'\n" +
+        "            ^^  ^^",
+        "        __            __\n" +
+        "       ( <`          '> )\n" +
+        "      (  / @        @ \\  )\n" +
+        "       \\(_ _\\  .--.  /_ _)/\n" +
+        "     (\\ `-/  .'  '.  \\-' /)\n" +
+        "      \"===\\ / .::. \\ /===\"\n" +
+        "       .==')(.:::::.)(`==.\n" +
+        "      ' .='  ':::::' `=. '\n" +
+        "     /  / .::::::::::. \\  \\\n" +
+        "    |  | (::::::::::::) |  |\n" +
+        "     \\  \\ '::::::::::' /  /\n" +
+        "      \\  \\  |  ||  |  /  /\n" +
+        "       \\  \\ |  ||  | /  /\n" +
+        "        '-.\\|__||__|/.-'\n" +
+        "            ^^  ^^"
     };
 
     @Override
@@ -62,7 +72,7 @@ public class LauncherActivity extends Activity {
         root.setPadding((int)(16*d), (int)(24*d), (int)(16*d), (int)(16*d));
 
         // Title
-        TextView title = mono("POCKETCLAW", 24, 0xFF00FF41);
+        TextView title = mono("POCKETCLAW", 24, 0xFFFFFFFF);
         title.setGravity(Gravity.CENTER);
         title.setLetterSpacing(0.3f);
         root.addView(title);
@@ -74,10 +84,10 @@ public class LauncherActivity extends Activity {
         root.addView(sub);
 
         // Lobster
-        lobsterView = mono(LOBSTER[0], 13, 0xFFFF9900);
-        lobsterView.setGravity(Gravity.CENTER_HORIZONTAL);
-        lobsterView.setPadding(0, (int)(4*d), 0, (int)(12*d));
-        root.addView(lobsterView);
+        crabView = mono(CRAB[0], 11, 0xFFEE3333);
+        crabView.setGravity(Gravity.CENTER_HORIZONTAL);
+        crabView.setPadding(0, (int)(4*d), 0, (int)(12*d));
+        root.addView(crabView);
 
         // Status
         statusView = mono("\u25CB Gateway    Connecting...", 11, 0xFF00AA00);
@@ -125,7 +135,7 @@ public class LauncherActivity extends Activity {
             final String d = display;
             handler.post(() -> {
                 statusView.setText(d);
-                lobsterView.setText(LOBSTER[frame % 2]);
+                crabView.setText(CRAB[frame % 2]);
                 frame++;
             });
             handler.postDelayed(fetchTask, 3000);
