@@ -41,6 +41,7 @@ while true; do
     --cwd=/root \
     /bin/bash -c "export PATH=/data/data/com.termux/files/usr/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
       && export HOME=/root \
+      && export SHELL=/bin/bash \
       && export NODE_OPTIONS='-r /root/hijack.js --expose-gc --max-old-space-size=128' \
       && . /root/.openclaw/env \
       && export MOONSHOT_API_KEY KIMI_API_KEY TELEGRAM_BOT_TOKEN OPENAI_API_KEY \
