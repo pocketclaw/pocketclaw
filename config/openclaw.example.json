@@ -1,0 +1,67 @@
+{
+  "models": {
+    "providers": {
+      "kimi-coding": {
+        "baseUrl": "https://api.kimi.com/coding/v1",
+        "apiKey": "${KIMI_API_KEY}",
+        "api": "openai-completions",
+        "headers": {
+          "User-Agent": "claude-code/1.0"
+        },
+        "models": [
+          {
+            "id": "kimi-for-coding",
+            "name": "Kimi For Coding",
+            "reasoning": false,
+            "input": ["text", "image"],
+            "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+            "contextWindow": 262144,
+            "maxTokens": 8192,
+            "headers": {
+              "User-Agent": "claude-code/1.0"
+            }
+          }
+        ]
+      }
+    }
+  },
+  "agents": {
+    "defaults": {
+      "model": {
+        "primary": "kimi-coding/kimi-for-coding"
+      },
+      "maxConcurrent": 4,
+      "subagents": {
+        "maxConcurrent": 8
+      }
+    }
+  },
+  "channels": {
+    "telegram": {
+      "enabled": true,
+      "dmPolicy": "open",
+      "botToken": "${TELEGRAM_BOT_TOKEN}",
+      "allowFrom": ["*"],
+      "groupPolicy": "allowlist",
+      "streamMode": "partial",
+      "network": {
+        "autoSelectFamily": true
+      }
+    }
+  },
+  "gateway": {
+    "port": 9000,
+    "mode": "local",
+    "auth": {
+      "mode": "token",
+      "token": "change-me-to-a-random-string"
+    }
+  },
+  "plugins": {
+    "entries": {
+      "telegram": {
+        "enabled": true
+      }
+    }
+  }
+}
