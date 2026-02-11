@@ -49,7 +49,9 @@ Bot:     "I'm running on a Moto E2 from 2015 with 1GB of RAM.
 - **A Telegram bot** running 24/7 on a phone that belongs in a museum
 - **Any AI you want** — works with any OpenAI-compatible provider (see [Pick Your AI](#-pick-your-ai))
 - **Voice messages** — send a voice note, get a text reply (via OpenAI Whisper)
-- **Fully autonomous** — watchdog auto-restarts on crash, survives reboots and sleep
+- **Fully autonomous** — watchdog + health checks auto-restart on crash or freeze, survives reboots
+- **`pocketclaw` CLI** — `start`, `stop`, `restart`, `status`, `logs`, `monitor` from one command
+- **RAM-optimized** — runs in 384 MB V8 heap with periodic GC on hardware that has 1 GB total
 - **17 documented hacks** — every impossible problem we hit, and how we solved it
 
 ## The Hardware
@@ -92,6 +94,59 @@ If it runs on a Moto E2 from 2015, **it runs on anything you own.**
 ```
 
 All connections are **outbound**. The phone calls Telegram and your AI provider — they never call back. This means: any WiFi works, any hotspot works, no port forwarding, no dynamic DNS. Plug it in and forget about it.
+
+---
+
+## 📊 Performance
+
+Running a modern AI gateway on 1 GB RAM requires aggressive optimization. Here's what we measured and tuned:
+
+### Memory budget
+
+| Component | RAM | Notes |
+|---|---|---|
+| Android + GMS | ~430 MB | Not rootable — Google Play Services can't be frozen |
+| OpenClaw gateway | ~200-224 MB | Telegram channel only, ESM bundle |
+| V8 heap headroom | ~160 MB | Boot peak needs ~350 MB, then settles |
+| **Total needed** | **~810 MB** | On 920 MB total |
+
+### What we tuned
+
+| Optimization | Impact |
+|---|---|
+| `--max-old-space-size=384` | Caps V8 heap. 256/320 MB OOM at boot — 384 is the minimum. |
+| `--expose-gc` + periodic GC | Explicit `global.gc()` every 60s frees ~10 MB per cycle |
+| Kill GMS sub-processes at startup | Frees ~50-100 MB temporarily (they respawn slowly) |
+| `vm.swappiness=10` | Stops aggressive zram swapping that wastes CPU |
+| Compile cache | Node 22's bytecode cache: 27 MB on disk, faster cold starts |
+| Concurrency limits | `maxConcurrency: 1`, `maxQueueSize: 2` — no parallel requests |
+
+### What we tested and ruled out
+
+| Idea | Result |
+|---|---|
+| V8 startup snapshot (`--build-snapshot`) | Builds OK (5 MB blob) but ESM restore fails: `ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING` |
+| CJS module stubs (block unused packages) | OpenClaw is 100% ESM bundled by Rolldown — 0 CJS `require()` calls to intercept |
+| Running without proot | Node v22 works via `ld-linux-armhf.so.3` trick, but no RAM savings (same V8 heap) |
+| npm package cleanup | Saves ~123 MB **disk** (not RAM) — packages are never loaded at runtime |
+| Bun runtime | No ARM32 build available |
+
+### Monitoring
+
+The `monitor` script logs RAM, CPU, swap, disk, battery every 5 minutes to a CSV. The `logrotate` cron trims everything to 24h. The `healthcheck` cron restarts the gateway if it stops responding.
+
+```
+$ pocketclaw status
+=== PocketClaw Status ===
+Gateway:  RUNNING (PID 12345)
+Uptime:   up 3 days, 2:15
+RAM:      356MB available / 898MB total
+Gateway:  224MB RSS
+Swap:     45MB used (swappiness=10)
+Disk:     271MB free
+Battery:  87%, 31.2°C
+Crons:    2 active
+```
 
 ---
 
@@ -309,7 +364,9 @@ OpenClaw works with **30+ providers** out of the box. Just change the provider, 
 | `plugins.entries.telegram.enabled: true` | **Required.** Without this, Telegram won't load even if `channels.telegram` is configured. |
 | `reasoning: false` | Prevents extended thinking mode that can cause empty responses. |
 | `network.autoSelectFamily: true` | Enables dual-stack IPv4/IPv6 for better connectivity. |
-| `--max-old-space-size=384` | Caps V8 heap to 384MB. Critical for 1GB RAM devices. |
+| `--max-old-space-size=384` | Caps V8 heap to 384 MB. 256/320 OOM at boot — 384 is the minimum for 1 GB devices. |
+| `--expose-gc` | Enables `global.gc()`. Combined with hijack.js timer, frees ~10 MB every 60s. |
+| `maxConcurrency: 1` | One request at a time. More would OOM on 1 GB RAM. |
 
 See [`config/openclaw.example.json`](config/openclaw.example.json) for the full working configuration.
 
@@ -393,8 +450,12 @@ pocketclaw/
     ├── start-openclaw.sh          # Gateway launcher with watchdog loop
     ├── restart-gw.sh              # Clean kill + restart
     ├── run-proot.sh               # Run commands inside proot
-    ├── boot-openclaw.sh           # Termux:Boot auto-start
-    └── hijack.js                  # os.networkInterfaces() bypass
+    ├── boot-openclaw.sh           # Termux:Boot auto-start + cron setup
+    ├── pocketclaw.sh              # CLI: start/stop/restart/status/logs/monitor
+    ├── healthcheck.sh             # Cron: restart gateway if unresponsive (every 2 min)
+    ├── logrotate.sh               # Cron: trim logs and CSV to 24h (every hour)
+    ├── monitor.sh                 # Background: log RAM/CPU/disk/battery to CSV
+    └── hijack.js                  # Runtime patch: fix os.networkInterfaces + periodic GC
 ```
 
 ### On the phone
@@ -403,7 +464,10 @@ pocketclaw/
 $PREFIX/bin/
   ├── start-openclaw       # → scripts/start-openclaw.sh
   ├── restart-gw           # → scripts/restart-gw.sh
-  └── run-proot            # → scripts/run-proot.sh
+  ├── run-proot            # → scripts/run-proot.sh
+  ├── pocketclaw           # → scripts/pocketclaw.sh
+  ├── healthcheck          # → scripts/healthcheck.sh  (cron every 2 min)
+  └── logrotate-pc         # → scripts/logrotate.sh    (cron every hour)
 
 $ROOTFS/root/
   ├── hijack.js            # → scripts/hijack.js
