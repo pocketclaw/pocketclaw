@@ -491,6 +491,54 @@ export NODE_OPTIONS='-r /root/hijack.js --expose-gc --max-old-space-size=192'
 
 **Statut : ✅ RÉSOLU — Gateway stable à ~178 Mo RSS avec heap 192 Mo**
 
+### Hack #21 — Android Debloat (sans root)
+**Problème :** Android + GMS occupent ~430-450 Mo sur 920 Mo. Le gateway (178 Mo) + Android ne laissent que ~140 Mo de marge. On veut réduire l'empreinte Android.
+
+**Tentative 1 — Supprimer GMS :**
+```bash
+# Toutes ces commandes échouent sans root :
+adb shell pm uninstall -k --user 0 com.google.android.gms
+# → DELETE_FAILED_DEVICE_POLICY_MANAGER
+
+adb shell pm disable-user --user 0 com.google.android.gms
+# → SecurityException: Permission Denial
+
+adb shell pm hide com.google.android.gms
+# → false
+```
+GMS est un Device Policy Manager sur Android 6 — impossible à supprimer, désactiver ou masquer sans root.
+
+**Tentative 2 — Supprimer les packages non-essentiels :**
+```bash
+# 12 packages supprimés avec succès :
+pm uninstall -k --user 0 com.google.android.inputmethod.latin    # clavier Google
+pm uninstall -k --user 0 com.google.android.setupwizard          # setup wizard
+pm uninstall -k --user 0 com.android.providers.calendar          # provider calendrier
+pm uninstall -k --user 0 com.google.android.syncadapters.calendar # sync calendrier
+pm uninstall -k --user 0 com.google.android.backuptransport      # backup
+pm uninstall -k --user 0 com.google.android.configupdater        # config updater
+pm uninstall -k --user 0 com.google.android.gsf.login            # GSF login
+pm uninstall -k --user 0 com.android.mms                         # MMS
+pm uninstall -k --user 0 com.android.calculator2                 # calculatrice
+pm uninstall -k --user 0 com.motorola.camera                     # caméra
+pm uninstall -k --user 0 com.android.dialer                      # téléphone
+pm uninstall -k --user 0 com.android.bluetooth                   # bluetooth
+```
+
+**Incident :** Pendant les uninstalls, le routage WiFi a été perdu temporairement (même symptôme que Hack #13 — `ip route show` ne montrait plus de default route). `svc wifi disable && svc wifi enable` n'a pas restauré la route.
+
+**Recovery :** `adb reboot` → les packages système restent supprimés pour user 0 (`-k` est persistant sur Android 6), mais le routage WiFi se rétablit normalement au boot.
+
+**Découvertes importantes :**
+1. `pm uninstall -k --user 0` est **persistant** sur Android 6 — les packages ne reviennent PAS au reboot (contrairement à Android 10+)
+2. `pm install-existing` n'existe PAS sur Android 6 (API 23) — pour restaurer, il faudrait un factory reset
+3. La perte de route était **transitoire** — après reboot, WiFi + routage fonctionnent parfaitement sans les 12 packages
+4. GMS core (gms, gms.persistent, gms.unstable) est intouchable sans root
+
+**Impact RAM :** Faible. Les 12 packages supprimés représentent ~50-70 Mo cumulés. Les gros consommateurs sont les process GMS core (~450 Mo) qu'on ne peut pas toucher.
+
+**Statut : ⚠️ PARTIEL — 12 packages supprimés, GMS intouchable sans root**
+
 ---
 
 ## Fichiers Clés sur le Téléphone
@@ -652,6 +700,7 @@ export NODE_OPTIONS='-r /root/hijack.js --expose-gc --max-old-space-size=192'
 | Log rotation | ✅ | Cron toutes les heures |
 | Periodic GC | ✅ | `global.gc()` toutes les 60s via hijack.js |
 | IPv6 DNS | ✅ | Hack #15 |
+| Android debloat | ⚠️ | 12 packages supprimés, GMS intouchable sans root (Hack #21) |
 
 ### Logs du gateway qui tourne :
 ```
@@ -831,6 +880,7 @@ adb shell "run-as com.termux sh -c 'export PREFIX=/data/data/com.termux/files/us
 15. ~~CLI `pocketclaw`~~ ✅ — start/stop/restart/status/logs/monitor
 16. ~~Créer le repo PocketClaw~~ ✅ — sur GitHub
 17. ~~Nettoyage npm (262 Mo)~~ ✅ — node_modules 413 → 151 Mo
+18. ~~Android debloat (Hack #21)~~ ⚠️ — 12 packages supprimés, GMS intouchable sans root
 
 ### Reste à faire
 - **Stabilité 24h** — laisser tourner une nuit complète, vérifier les logs
@@ -876,4 +926,4 @@ adb shell "run-as com.termux sh -c 'export PREFIX=/data/data/com.termux/files/us
 
 *"On m'a dit que c'était impossible, alors je l'ai fait." — Probablement pas Einstein, mais on s'en fout.*
 
-*Total : ~5 heures du premier `pkg install` au premier message IA reçu sur Telegram. 20 hacks. 0€ de hardware. Un Moto E2 de 2015 qui fait tourner un agent IA autonome en 2026. 183 Mo de RSS au lieu de 224 Mo, 151 Mo de node_modules au lieu de 413 Mo.*
+*Total : ~5 heures du premier `pkg install` au premier message IA reçu sur Telegram. 21 hacks. 0€ de hardware. Un Moto E2 de 2015 qui fait tourner un agent IA autonome en 2026. 178 Mo de RSS au lieu de 224 Mo, 151 Mo de node_modules au lieu de 413 Mo.*
