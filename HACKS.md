@@ -508,9 +508,9 @@ adb shell pm hide com.google.android.gms
 ```
 GMS est un Device Policy Manager sur Android 6 — impossible à supprimer, désactiver ou masquer sans root.
 
-**Tentative 2 — Supprimer les packages non-essentiels :**
+**Tentative 2 — Supprimer les packages non-essentiels (2 vagues) :**
 ```bash
-# 12 packages supprimés avec succès :
+# Vague 1 — 12 packages :
 pm uninstall -k --user 0 com.google.android.inputmethod.latin    # clavier Google
 pm uninstall -k --user 0 com.google.android.setupwizard          # setup wizard
 pm uninstall -k --user 0 com.android.providers.calendar          # provider calendrier
@@ -523,21 +523,134 @@ pm uninstall -k --user 0 com.android.calculator2                 # calculatrice
 pm uninstall -k --user 0 com.motorola.camera                     # caméra
 pm uninstall -k --user 0 com.android.dialer                      # téléphone
 pm uninstall -k --user 0 com.android.bluetooth                   # bluetooth
+
+# Vague 2 — 16 packages supplémentaires :
+pm uninstall -k --user 0 com.android.captiveportallogin          # portail captif
+pm uninstall -k --user 0 com.android.carrierconfig               # config opérateur
+pm uninstall -k --user 0 com.android.certinstaller               # installeur certificats
+pm uninstall -k --user 0 com.android.documentsui                 # gestionnaire fichiers
+pm uninstall -k --user 0 com.android.inputdevices                # périphériques saisie
+pm uninstall -k --user 0 com.android.mms.service                 # service MMS
+pm uninstall -k --user 0 com.android.pacprocessor                # proxy PAC
+pm uninstall -k --user 0 com.android.phone                       # téléphone
+pm uninstall -k --user 0 com.android.providers.contacts          # provider contacts
+pm uninstall -k --user 0 com.android.providers.downloads         # provider downloads
+pm uninstall -k --user 0 com.android.providers.downloads.ui      # UI downloads
+pm uninstall -k --user 0 com.android.providers.media             # provider média
+pm uninstall -k --user 0 com.android.providers.telephony         # provider téléphonie
+pm uninstall -k --user 0 com.android.proxyhandler                # proxy handler
+pm uninstall -k --user 0 com.android.server.telecom              # serveur telecom
+pm uninstall -k --user 0 com.motorola.android.providers.settings # settings Motorola
+pm uninstall -k --user 0 com.qualcomm.qcrilmsgtunnel             # Qualcomm RIL
+pm uninstall -k --user 0 com.google.android.webview              # WebView
+pm uninstall -k --user 0 com.motorola.android.sepolicyupdate     # SEPolicy updater
+pm uninstall -k --user 0 com.qualcomm.timeservice                # service temps Qualcomm
+pm uninstall -k --user 0 com.android.backupconfirm               # confirmation backup
+# Échoué : com.motorola.ccc.devicemanagement (DELETE_FAILED_DEVICE_POLICY_MANAGER)
 ```
 
-**Incident :** Pendant les uninstalls, le routage WiFi a été perdu temporairement (même symptôme que Hack #13 — `ip route show` ne montrait plus de default route). `svc wifi disable && svc wifi enable` n'a pas restauré la route.
+**Total : 28 packages supprimés** (12 + 16). Seuls 2 ont résisté : `com.google.android.gms` et `com.motorola.ccc.devicemanagement` (tous deux Device Policy Manager).
 
-**Recovery :** `adb reboot` → les packages système restent supprimés pour user 0 (`-k` est persistant sur Android 6), mais le routage WiFi se rétablit normalement au boot.
+**Incident vague 1 :** Pendant les uninstalls, le routage WiFi a été perdu temporairement (même symptôme que Hack #13). `svc wifi disable && svc wifi enable` n'a pas restauré la route. Recovery : `adb reboot`.
+
+**Vague 2 :** Aucun incident réseau. Les 16 packages supprimés n'affectent pas le routage.
 
 **Découvertes importantes :**
 1. `pm uninstall -k --user 0` est **persistant** sur Android 6 — les packages ne reviennent PAS au reboot (contrairement à Android 10+)
 2. `pm install-existing` n'existe PAS sur Android 6 (API 23) — pour restaurer, il faudrait un factory reset
-3. La perte de route était **transitoire** — après reboot, WiFi + routage fonctionnent parfaitement sans les 12 packages
+3. La perte de route de la vague 1 était **transitoire** — après reboot, WiFi + routage fonctionnent parfaitement sans les 28 packages
 4. GMS core (gms, gms.persistent, gms.unstable) est intouchable sans root
 
-**Impact RAM :** Faible. Les 12 packages supprimés représentent ~50-70 Mo cumulés. Les gros consommateurs sont les process GMS core (~450 Mo) qu'on ne peut pas toucher.
+**Packages restants (intouchables) :**
+```
+android, com.android.systemui, com.android.settings, com.android.shell,
+com.android.keychain, com.android.externalstorage, com.android.defcontainer,
+com.android.location.fused, com.android.packageinstaller,
+com.google.android.gsf, com.google.android.gms,
+com.motorola.ccc.devicemanagement
+```
 
-**Statut : ⚠️ PARTIEL — 12 packages supprimés, GMS intouchable sans root**
+**Statut : ⚠️ PARTIEL — 28 packages supprimés, GMS intouchable sans root**
+
+### Hack #22 — Static IP + GMS Kill (le dernier mur)
+**Problème :** GMS mange ~270 Mo de RAM (gms.persistent 136 Mo + gms 133 Mo). Le tuer coupe le WiFi (Hack #13) parce que GMS gère le routage DHCP.
+
+**Discovery :** Le WiFi du téléphone était déjà en IP statique (settings). La route dans la table 1030 est `proto static` — elle ne dépend pas de GMS pour être maintenue.
+
+```bash
+# Vérification :
+settings get global wifi_static_ip          # 1
+settings get global wifi_static_ip_address  # 192.168.1.14
+settings get global wifi_static_gateway     # 192.168.1.254
+settings get global wifi_static_netmask     # 255.255.255.0
+settings get global wifi_static_dns1        # 8.8.8.8
+
+ip route show table 1030
+# default via 192.168.1.254 dev wlan0  proto static
+```
+
+**Test : tuer GMS avec IP statique :**
+```bash
+adb shell am force-stop com.google.android.gms
+# → Route intacte, ping OK, gateway OK, 0 process GMS
+# → MemFree passe de 53 Mo à 126 Mo, Cached 393 Mo
+# → Total libre : ~520 Mo (était ~290 Mo)
+```
+
+**Résultat : GMS tué, réseau tient.** Mais GMS respawn automatiquement en ~2 minutes.
+
+**Tentative cron kill depuis Termux :**
+```bash
+# Termux am (version allégée) :
+am force-stop com.google.android.gms
+# → "Error: unknown command 'force-stop'" (la commande n'existe pas)
+
+# System am depuis Termux :
+PATH=/system/bin:$PATH am force-stop com.google.android.gms
+# → "SecurityException: Permission Denial: forceStopPackage() from uid=10001
+#    requires android.permission.FORCE_STOP_PACKAGES"
+```
+
+**Constat :** `am force-stop` nécessite `FORCE_STOP_PACKAGES`, permission réservée au shell ADB (uid 2000). Termux tourne en uid 10001 — **tous les `am force-stop` dans les scripts Termux étaient des no-ops silencieux depuis le début.**
+
+**Tentative ADB-from-Termux :**
+- Binaire statique adb-arm (p2p-adb) : version 1.0.29, trop vieux pour l'auth RSA d'Android 6
+- `adb tcpip 5555` active bien le port TCP, mais le vieux client ne peut pas s'authentifier
+
+**Bilan des process kills depuis Termux vs ADB :**
+
+| Action | ADB shell (uid 2000) | Termux SSH (uid 10001) |
+|---|---|---|
+| `am force-stop` | ✅ Fonctionne | ❌ Permission Denial |
+| `am kill` (background) | ✅ Fonctionne | ❌ Commande inconnue |
+| `pm uninstall -k --user 0` | ✅ Permanent | N/A (déjà fait) |
+| `kill -9 PID` (autre uid) | ❌ Operation not permitted | ❌ Operation not permitted |
+
+**Conséquence :** En mode autonome (sans USB), GMS respawn librement. Les 270 Mo ne sont récupérables que pendant une session ADB.
+
+| Mode | RAM utilisée | RAM libre |
+|---|---|---|
+| USB + kills ADB | ~356 Mo | ~564 Mo (61%) |
+| Autonome (GMS respawn) | ~626 Mo | ~294 Mo (32%) |
+
+**Fix définitif : root.** Avec root, `am force-stop` fonctionne depuis n'importe quel uid, et on peut `pm uninstall --user 0 com.google.android.gms` (plus de Device Policy Manager restriction).
+
+**Statut : ⚠️ BLOQUÉ — GMS tuable depuis ADB mais pas depuis Termux. Root requis pour autonomie.**
+
+### Hack #23 — API Keys hors de `ps` output
+**Problème :** Les clés API (Kimi, Telegram, OpenAI) étaient passées en arguments de la commande `proot`, visibles en clair dans `ps -eo args`.
+
+**Solution :** Charger les clés depuis `/root/.openclaw/env` à l'intérieur de proot au lieu de les passer en ligne de commande.
+
+```bash
+# Avant (visible dans ps) :
+proot ... /bin/bash -c "... && export TELEGRAM_BOT_TOKEN='8360...' && ..."
+
+# Après (invisible dans ps) :
+proot ... /bin/bash -c "... && . /root/.openclaw/env && export MOONSHOT_API_KEY KIMI_API_KEY TELEGRAM_BOT_TOKEN OPENAI_API_KEY && ..."
+```
+
+**Statut : ✅ RÉSOLU — Clés API invisibles dans `ps`**
 
 ---
 
@@ -700,7 +813,9 @@ export NODE_OPTIONS='-r /root/hijack.js --expose-gc --max-old-space-size=192'
 | Log rotation | ✅ | Cron toutes les heures |
 | Periodic GC | ✅ | `global.gc()` toutes les 60s via hijack.js |
 | IPv6 DNS | ✅ | Hack #15 |
-| Android debloat | ⚠️ | 12 packages supprimés, GMS intouchable sans root (Hack #21) |
+| Android debloat | ⚠️ | 28 packages supprimés, GMS intouchable sans root (Hack #21) |
+| GMS kill (static IP) | ⚠️ | Fonctionne depuis ADB, pas depuis Termux (Hack #22) |
+| API keys sécurisées | ✅ | Chargées depuis env file, invisibles dans `ps` (Hack #23) |
 
 ### Logs du gateway qui tourne :
 ```
@@ -880,13 +995,14 @@ adb shell "run-as com.termux sh -c 'export PREFIX=/data/data/com.termux/files/us
 15. ~~CLI `pocketclaw`~~ ✅ — start/stop/restart/status/logs/monitor
 16. ~~Créer le repo PocketClaw~~ ✅ — sur GitHub
 17. ~~Nettoyage npm (262 Mo)~~ ✅ — node_modules 413 → 151 Mo
-18. ~~Android debloat (Hack #21)~~ ⚠️ — 12 packages supprimés, GMS intouchable sans root
+18. ~~Android debloat (Hack #21)~~ ✅ — 28 packages supprimés (permanent)
+19. ~~Static IP + GMS kill (Hack #22)~~ ⚠️ — fonctionne depuis ADB, bloqué depuis Termux (uid 10001)
+20. ~~API keys sécurisées (Hack #23)~~ ✅ — chargées depuis env file, invisibles dans `ps`
 
 ### Reste à faire
+- **Root le téléphone** — **SEUL blocker restant** : `am force-stop` depuis Termux + freeze GMS = -270 Mo RAM permanent
 - **Stabilité 24h** — laisser tourner une nuit complète, vérifier les logs
 - **Deploy config live** — Groq fallback, identity/personnalité, customCommands (seulement dans l'example JSON, pas sur le phone)
-- **Fix API keys dans `ps`** — les clés sont visibles dans la ligne de commande proot (security concern)
-- **Root le téléphone** — plus gros gain restant : freeze GMS = -260 Mo RAM
 - **Test sans proot après root** — Node 22 fonctionne via `ld-linux-armhf.so.3`, mais proot coûte du CPU
 - **Considérer rendre le repo public**
 
@@ -926,4 +1042,4 @@ adb shell "run-as com.termux sh -c 'export PREFIX=/data/data/com.termux/files/us
 
 *"On m'a dit que c'était impossible, alors je l'ai fait." — Probablement pas Einstein, mais on s'en fout.*
 
-*Total : ~5 heures du premier `pkg install` au premier message IA reçu sur Telegram. 21 hacks. 0€ de hardware. Un Moto E2 de 2015 qui fait tourner un agent IA autonome en 2026. 178 Mo de RSS au lieu de 224 Mo, 151 Mo de node_modules au lieu de 413 Mo.*
+*Total : ~5 heures du premier `pkg install` au premier message IA reçu sur Telegram. 23 hacks. 0€ de hardware. Un Moto E2 de 2015 qui fait tourner un agent IA autonome en 2026. 176 Mo de RSS au lieu de 224 Mo, 151 Mo de node_modules au lieu de 413 Mo, 28 packages Android supprimés, 294 Mo libres en autonome (564 Mo avec USB kills).*
