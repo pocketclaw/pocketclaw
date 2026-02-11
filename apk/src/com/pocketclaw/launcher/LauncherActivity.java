@@ -12,9 +12,12 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 
 import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileReader;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.ArrayList;
 
 public class LauncherActivity extends Activity {
     private TextView crabView, statusView;
@@ -22,38 +25,56 @@ public class LauncherActivity extends Activity {
     private final Runnable fetchTask = this::fetchLoop;
     private int frame = 0;
 
-    private static final String[] CRAB = {
-        "        __            __\n" +
-        "       / <`          '> \\\n" +
-        "      (  / @        @ \\  )\n" +
-        "       \\(_ _\\  .--.  /_ _)/\n" +
-        "     (\\ `-/  .'  '.  \\-' /)\n" +
-        "      \"===\\ / .::. \\ /===\"\n" +
-        "       .==')(.:::::.)(`==.\n" +
-        "      ' .='  ':::::' `=. '\n" +
-        "     /  / .::::::::::. \\  \\\n" +
-        "    |  | (::::::::::::) |  |\n" +
-        "     \\  \\ '::::::::::' /  /\n" +
-        "      \\  \\  |  ||  |  /  /\n" +
-        "       \\  \\ |  ||  | /  /\n" +
-        "        '-.\\|__||__|/.-'\n" +
-        "            ^^  ^^",
-        "        __            __\n" +
-        "       ( <`          '> )\n" +
-        "      (  / @        @ \\  )\n" +
-        "       \\(_ _\\  .--.  /_ _)/\n" +
-        "     (\\ `-/  .'  '.  \\-' /)\n" +
-        "      \"===\\ / .::. \\ /===\"\n" +
-        "       .==')(.:::::.)(`==.\n" +
-        "      ' .='  ':::::' `=. '\n" +
-        "     /  / .::::::::::. \\  \\\n" +
-        "    |  | (::::::::::::) |  |\n" +
-        "     \\  \\ '::::::::::' /  /\n" +
-        "      \\  \\  |  ||  |  /  /\n" +
-        "       \\  \\ |  ||  | /  /\n" +
-        "        '-.\\|__||__|/.-'\n" +
-        "            ^^  ^^"
+    private static final String[] DEFAULT_CRAB = {
+        "          __       __\n" +
+        "         / <`     '> \\\n" +
+        "        (  / @   @ \\  )\n" +
+        "         \\(_ _\\_/_ _)/\n" +
+        "       (\\ `-/     \\-' /)\n" +
+        "        \"===\\     /===\"\n" +
+        "         .==')___(`==.\n" +
+        "        ' .='     `=. '\n" +
+        "       / / |       | \\ \\\n" +
+        "      / /  |_______|  \\ \\\n" +
+        "     '-'    ^^   ^^    '-'",
+        "          __       __\n" +
+        "         ( <`     '> )\n" +
+        "        (  / @   @ \\  )\n" +
+        "         \\(_ _\\_/_ _)/\n" +
+        "       (\\ `-/     \\-' /)\n" +
+        "        \"===\\     /===\"\n" +
+        "         .==')___(`==.\n" +
+        "        ' .='     `=. '\n" +
+        "       / / |       | \\ \\\n" +
+        "      / /  |_______|  \\ \\\n" +
+        "     '-'    ^^   ^^    '-'"
     };
+
+    private String[] crab = DEFAULT_CRAB;
+
+    private void loadCrab() {
+        try {
+            File f = new File("/sdcard/pocketclaw-crab.txt");
+            if (!f.exists()) return;
+            BufferedReader r = new BufferedReader(new FileReader(f));
+            ArrayList<String> frames = new ArrayList<>();
+            StringBuilder cur = new StringBuilder();
+            String line;
+            while ((line = r.readLine()) != null) {
+                if (line.equals("---")) {
+                    if (cur.length() > 0) frames.add(cur.toString().replaceAll("\\n$", ""));
+                    cur = new StringBuilder();
+                } else {
+                    if (cur.length() > 0) cur.append('\n');
+                    cur.append(line);
+                }
+            }
+            if (cur.length() > 0) frames.add(cur.toString().replaceAll("\\n$", ""));
+            r.close();
+            if (frames.size() >= 2) crab = new String[]{frames.get(0), frames.get(1)};
+            else if (frames.size() == 1) crab = new String[]{frames.get(0), frames.get(0)};
+        } catch (Exception e) {}
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -83,8 +104,9 @@ public class LauncherActivity extends Activity {
         sub.setPadding(0, (int)(2*d), 0, (int)(8*d));
         root.addView(sub);
 
-        // Lobster
-        crabView = mono(CRAB[0], 11, 0xFFEE3333);
+        // Crab (load from /sdcard/pocketclaw-crab.txt if exists)
+        loadCrab();
+        crabView = mono(crab[0], 12, 0xFFEE3333);
         crabView.setGravity(Gravity.CENTER_HORIZONTAL);
         crabView.setPadding(0, (int)(4*d), 0, (int)(12*d));
         root.addView(crabView);
@@ -135,7 +157,7 @@ public class LauncherActivity extends Activity {
             final String d = display;
             handler.post(() -> {
                 statusView.setText(d);
-                crabView.setText(CRAB[frame % 2]);
+                crabView.setText(crab[frame % 2]);
                 frame++;
             });
             handler.postDelayed(fetchTask, 3000);
