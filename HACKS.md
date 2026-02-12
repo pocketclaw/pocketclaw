@@ -1607,6 +1607,85 @@ pm disable com.android.keychain       # -35 MB (cert management UI)
 
 ---
 
+### Hack #43 — Git wrapper sed rewrite (replaces bash substitution)
+
+**Problem:** npm passes SSH URLs in multiple formats: `git+ssh://git@github.com/...`, `ssh://git@github.com/...`, `git@github.com:...`. Bash `${var/pattern/replace}` only catches one format, leaving the other two to fail with authentication errors.
+
+**Solution:** Use `sed` in the git wrapper to rewrite all 3 SSH URL patterns to HTTPS in a single pass:
+
+```bash
+ARGS=$(echo "$@" | sed 's|git+ssh://git@github.com|https://github.com|g; s|ssh://git@github.com|https://github.com|g; s|git@github.com:|https://github.com/|g')
+```
+
+File: `$ROOTFS/usr/local/bin/git`
+
+**Status: OK — All 3 SSH URL formats rewritten to HTTPS, npm git dependencies resolve correctly**
+
+---
+
+### Hack #44 — npm cache on ext4 (not SD card)
+
+**Problem:** FAT32/sdcardfs on `/sdcard/` can't handle deep nested paths that git creates during `npm install` for git dependencies. Error: `unable to write file .git/objects/1c/30d7d7e76a3b0aa120b04dc6a26f5a12dccf67: No such file or directory`. The SD card filesystem silently truncates or rejects paths that exceed its limits.
+
+**Solution:** Move npm cache inside the rootfs (ext4 filesystem) instead of the SD card:
+
+```bash
+npm config set cache /root/.npm-cache
+```
+
+**Why this works:** The rootfs lives on `/data/` which is ext4 — no path length or nesting limits. The SD card (Hack #8) was fine for regular npm packages but breaks on git dependencies that create deep `.git/objects/` hierarchies.
+
+**Trade-off:** Uses internal storage instead of SD card. npm cache is ~50-100 MB, but with 715 MB free after rootfs diet (Hack #37), this is acceptable.
+
+**Status: OK — git dependencies install cleanly, no more path errors**
+
+---
+
+### Hack #45 — ESM stubs at HOST path (bind mount shadow fix)
+
+**Problem:** With `--bind=$PREFIX:$PREFIX`, proot resolves `/data/data/com.termux/files/usr/` to the HOST filesystem, NOT the rootfs. So stubs created at `$ROOTFS/data/data/.../openclaw/node_modules/` are invisible — they're shadowed by the real packages at `$PREFIX/lib/node_modules/openclaw/node_modules/`. Node.js sees the originals, not the stubs. All the RAM savings from Hack #19 disappear.
+
+**Root cause:** proot bind mounts work by intercepting syscalls. When a path matches a bind mount source, proot redirects it to the host path. Since `$PREFIX` is bind-mounted to itself, any file under `$PREFIX` on the rootfs is invisible — the host version wins.
+
+**Solution:** Create stubs at the HOST path directly, not inside the rootfs:
+
+```bash
+OCDIR=$PREFIX/lib/node_modules/openclaw/node_modules
+```
+
+NOT `$ROOTFS/data/data/com.termux/files/usr/lib/node_modules/openclaw/node_modules`
+
+This writes the stub packages directly where Node.js will find them, bypassing the bind mount shadow entirely.
+
+Files: `scripts/create-stubs.sh`, `tools/fix-stubs.sh`
+
+**Status: OK — Stubs visible to Node.js, RAM savings restored**
+
+---
+
+### Hack #46 — V8 heap 192MB minimum
+
+**Problem:** 128MB heap (Hack #27) OOMs during OpenClaw startup even with ESM stubs. The startup compilation phase — where V8 parses, compiles, and links all ESM modules — needs ~186MB of heap. This is a transient peak: once boot completes, steady-state usage drops to ~90-110MB. But V8 must survive the peak to reach steady state.
+
+**Solution:** Set 192MB as the minimum viable heap:
+
+```bash
+--max-old-space-size=192
+```
+
+**Why 192 and not 128:** On 898MB RAM (Moto E2), the boot peak at 186MB plus V8 GC overhead exceeds 128MB. The GC via hijack.js (Hack #4) frees ~15MB periodically to keep it stable after boot, but can't help during the initial compilation burst.
+
+**Why not higher:** Every MB of V8 heap is a MB Android can't use. 192MB leaves ~524MB for Android (Tier 1.5 debloat) — enough margin for WiFi management and background services.
+
+```bash
+# In start-openclaw.sh
+export NODE_OPTIONS='-r /root/hijack.js --expose-gc --max-old-space-size=192'
+```
+
+**Status: OK — Gateway boots reliably at 192MB heap, stable at ~178MB RSS**
+
+---
+
 *"On m'a dit que c'était impossible, alors je l'ai fait." — Probablement pas Einstein, mais on s'en fout.*
 
-*Total : ~14 heures. 42 hacks. 0 EUR de hardware. Un Moto E2 de 2015 transformé en PocketClaw OS : agent IA autonome, dashboard CRT green, setup wizard web, installer one-liner, headless server mode avec Android à 196 MB. Un brick. Un factory reset. Des leçons. De PoC à produit installable.*
+*Total : ~14 heures. 46 hacks. 0 EUR de hardware. Un Moto E2 de 2015 transformé en PocketClaw OS : agent IA autonome, dashboard CRT green, setup wizard web, installer one-liner, headless server mode avec Android à 196 MB. Un brick. Un factory reset. Des leçons. De PoC à produit installable.*

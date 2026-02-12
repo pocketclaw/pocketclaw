@@ -2,9 +2,12 @@ package com.pocketclaw.launcher;
 
 import android.app.Activity;
 import android.graphics.Typeface;
+import android.os.BatteryManager;
 import android.os.Bundle;
+import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.StatFs;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -27,7 +30,7 @@ import java.net.URL;
 import java.util.ArrayList;
 
 public class LauncherActivity extends Activity {
-    private TextView crabView, statusView, emergencyBtn;
+    private TextView crabView, ramView, statusView, emergencyBtn;
     private LinearLayout rootLayout;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Runnable fetchTask = this::fetchLoop;
@@ -36,35 +39,35 @@ public class LauncherActivity extends Activity {
     private long[] titleTaps = new long[3];
     private int titleTapIndex = 0;
     private int offlineCount = 0;
-    private static final int OFFLINE_THRESHOLD = 100; // ~5 min at 3s intervals
+    private boolean lastWasOnline = false;
+    private static final int OFFLINE_THRESHOLD = 60; // ~5 min at 5s intervals
     private BroadcastReceiver exitReceiver;
 
     private static final String[] DEFAULT_CRAB = {
-        "          __       __\n" +
-        "         / <`     '> \\\n" +
-        "        (  / @   @ \\  )\n" +
-        "         \\(_ _\\_/_ _)/\n" +
-        "       (\\ `-/     \\-' /)\n" +
-        "        \"===\\     /===\"\n" +
-        "         .==')___(`==.\n" +
-        "        ' .='     `=. '\n" +
-        "       / / |       | \\ \\\n" +
-        "      / /  |_______|  \\ \\\n" +
-        "     '-'    ^^   ^^    '-'",
-        "          __       __\n" +
-        "         ( <`     '> )\n" +
-        "        (  / @   @ \\  )\n" +
-        "         \\(_ _\\_/_ _)/\n" +
-        "       (\\ `-/     \\-' /)\n" +
-        "        \"===\\     /===\"\n" +
-        "         .==')___(`==.\n" +
-        "        ' .='     `=. '\n" +
-        "       / / |       | \\ \\\n" +
-        "      / /  |_______|  \\ \\\n" +
-        "     '-'    ^^   ^^    '-'"
+        "     __       __    \n" +
+        "    / <`     `> \\   \n" +
+        "   (  / @   @ \\  )  \n" +
+        "    \\(  \\_-_/  )/   \n" +
+        "  (\\ `-/     \\-` /)\n" +
+        "   \"==/   _   \\==\"  \n" +
+        "    .=') [_] (`=.   \n" +
+        "   ' .='     `=. '  ",
+        "    __         __   \n" +
+        "   ( <`       `> )  \n" +
+        "   (  / @   @ \\  )  \n" +
+        "    \\(  \\_-_/  )/   \n" +
+        "  (\\ `-/     \\-` /)\n" +
+        "   \"==/   _   \\==\"  \n" +
+        "    .=') [_] (`=.   \n" +
+        "   ' .='     `=. '  "
     };
 
     private String[] crab = DEFAULT_CRAB;
+
+    // Block Unicode title — spaced for readability
+    private static final String BLOCK_TITLE =
+        "\u2588\u2580\u2588 \u2588\u2580\u2588 \u2588\u2580\u2580 \u2588\u2584\u2580 \u2588\u2580\u2580 \u2580\u2588\u2580 \u2588\u2580\u2580 \u2588   \u2584\u2580\u2588 \u2588 \u2588 \u2588\n" +
+        "\u2588\u2580\u2580 \u2588\u2584\u2588 \u2588\u2584\u2584 \u2588 \u2588 \u2588\u2588\u2584  \u2588  \u2588\u2584\u2584 \u2588\u2584\u2584 \u2588\u2580\u2588 \u2580\u2584\u2580\u2584\u2580";
 
     private void loadCrab() {
         try {
@@ -111,12 +114,18 @@ public class LauncherActivity extends Activity {
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding((int)(16*d), (int)(8*d), (int)(16*d), (int)(16*d));
+        root.setPadding((int)(12*d), (int)(8*d), (int)(12*d), (int)(16*d));
 
-        // Title
-        TextView title = mono("POCKETCLAW", 24, 0xFFFFFFFF);
+        // Crab at the top, centered
+        loadCrab();
+        crabView = mono(crab[0], 11, 0xFFEE3333);
+        crabView.setGravity(Gravity.CENTER_HORIZONTAL);
+        crabView.setPadding(0, (int)(4*d), 0, (int)(4*d));
+        root.addView(crabView);
+
+        // Block title (POCKETCLAW) — bigger, spaced
+        TextView title = mono(BLOCK_TITLE, 11, 0xFFFFFFFF);
         title.setGravity(Gravity.CENTER);
-        title.setLetterSpacing(0.3f);
         title.setOnClickListener(v -> {
             titleTaps[titleTapIndex % 3] = System.currentTimeMillis();
             titleTapIndex++;
@@ -134,24 +143,23 @@ public class LauncherActivity extends Activity {
         // Subtitle
         TextView sub = mono("MOTO E2 \u2022 1GB \u2022 ANDROID 6", 9, 0xFF1A3A1A);
         sub.setGravity(Gravity.CENTER);
-        sub.setPadding(0, (int)(2*d), 0, (int)(8*d));
+        sub.setPadding(0, (int)(2*d), 0, (int)(20*d));
         root.addView(sub);
 
-        // Crab (load from /sdcard/pocketclaw-crab.txt if exists)
-        loadCrab();
-        crabView = mono(crab[0], 12, 0xFFEE3333);
-        crabView.setGravity(Gravity.CENTER_HORIZONTAL);
-        crabView.setPadding(0, (int)(4*d), 0, (int)(12*d));
-        root.addView(crabView);
+        // RAM bar (centered, separate from status)
+        ramView = mono("", 12, 0xFF00AA00);
+        ramView.setGravity(Gravity.CENTER);
+        ramView.setPadding(0, 0, 0, (int)(10*d));
+        root.addView(ramView);
 
-        // Status
-        statusView = mono("\u25CB Gateway    Connecting...", 11, 0xFF00AA00);
-        statusView.setPadding((int)(4*d), 0, (int)(4*d), (int)(8*d));
-        statusView.setLineSpacing(0, 1.15f);
+        // Status (services + processes + info)
+        statusView = mono("\u25CB Gateway    Connecting...", 12, 0xFF00AA00);
+        statusView.setPadding(0, 0, 0, (int)(8*d));
+        statusView.setLineSpacing(0, 1.2f);
         root.addView(statusView);
 
         // Footer
-        TextView ft = mono("V8 128MB \u2022 PROOT \u2022 NODE 22 \u2022 KIMI", 8, 0xFF082A08);
+        TextView ft = mono("V8 192MB \u2022 PROOT \u2022 NODE 22 \u2022 KIMI", 8, 0xFF082A08);
         ft.setGravity(Gravity.CENTER);
         ft.setPadding(0, (int)(8*d), 0, 0);
         root.addView(ft);
@@ -186,7 +194,9 @@ public class LauncherActivity extends Activity {
 
     private void fetchLoop() {
         new Thread(() -> {
-            String display;
+            String ramDisplay = "";
+            String statusDisplay;
+            boolean online = false;
             try {
                 URL url = new URL("http://localhost:9000/api/status");
                 HttpURLConnection c = (HttpURLConnection) url.openConnection();
@@ -197,48 +207,55 @@ public class LauncherActivity extends Activity {
                 String line;
                 while ((line = r.readLine()) != null) sb.append(line);
                 r.close();
-                display = format(sb.toString());
+                String json = sb.toString();
+                ramDisplay = formatRam(json);
+                statusDisplay = formatStatus(json);
                 offlineCount = 0;
+                online = true;
             } catch (Exception e) {
-                display = "\u25CB Gateway    OFFLINE\n\nWaiting for boot...";
+                statusDisplay = "\u25CB Gateway    OFFLINE\n\nWaiting for boot...";
                 offlineCount++;
             }
-            final String d = display;
+            final String rd = ramDisplay;
+            final String sd = statusDisplay;
             final boolean showEmergency = offlineCount >= OFFLINE_THRESHOLD;
+            final boolean stateChanged = (online != lastWasOnline);
+            lastWasOnline = online;
+            final int delay = stateChanged ? 3000 : 5000;
             handler.post(() -> {
-                statusView.setText(d);
+                ramView.setText(rd);
+                statusView.setText(sd);
                 crabView.setText(crab[frame % 2]);
                 frame++;
                 emergencyBtn.setVisibility(showEmergency ? View.VISIBLE : View.GONE);
             });
-            handler.postDelayed(fetchTask, 3000);
+            handler.postDelayed(fetchTask, delay);
         }).start();
     }
 
-    private String format(String j) {
-        StringBuilder s = new StringBuilder();
-        s.append(dot(j, "\"status\":\"up\"")).append(" Gateway    ").append(has(j, "\"status\":\"up\"") ? "200 OK" : "DOWN").append('\n');
-        s.append(dot(j, "\"wifi\":true")).append(" WiFi       ").append(has(j, "\"wifi\":true") ? "Online" : "Offline").append('\n');
-        s.append(dot(j, "\"telegram\":true")).append(" Telegram   ").append(has(j, "\"telegram\":true") ? "Live" : "Down").append('\n');
-        s.append(dot(j, "\"kimi\":true")).append(" Kimi K2.5  ").append(has(j, "\"kimi\":true") ? "Connected" : "No Key").append('\n');
-        s.append('\n');
-
+    private String formatRam(String j) {
         int ri = j.indexOf("\"ram\":{");
-        if (ri >= 0) {
-            int used = num(j, "\"used\":", ri);
-            int total = num(j, "\"total\":", ri);
-            if (total > 0) {
-                int pct = Math.round((float) used / total * 100);
-                s.append("RAM  ").append(used).append('/').append(total).append(" MB (").append(pct).append("%)\n");
-                int filled = pct / 5;
-                for (int i = 0; i < 20; i++) s.append(i < filled ? '\u2588' : '\u2591');
-                s.append("\n\n");
-            }
-        }
+        if (ri < 0) return "";
+        int used = num(j, "\"used\":", ri);
+        int total = num(j, "\"total\":", ri);
+        if (total <= 0) return "";
+        int pct = Math.round((float) used / total * 100);
+        StringBuilder s = new StringBuilder();
+        int filled = pct / 5;
+        for (int i = 0; i < 20; i++) s.append(i < filled ? '\u2588' : '\u2591');
+        s.append(' ').append(pct).append("%\n");
+        s.append(used).append(" / ").append(total).append(" MB");
+        return s.toString();
+    }
 
-        s.append("TOP PROCESSES\n");
+    private String formatStatus(String j) {
+        StringBuilder s = new StringBuilder();
+
+        // Parse processes
+        String[][] procs = new String[8][2];
+        int procCount = 0;
         int pi = 0;
-        while (true) {
+        while (procCount < 8) {
             int nS = j.indexOf("\"n\":\"", pi);
             if (nS < 0) break;
             nS += 5;
@@ -248,25 +265,111 @@ public class LauncherActivity extends Activity {
             int mS = j.indexOf("\"m\":", nE) + 4;
             int mE = mS;
             while (mE < j.length() && Character.isDigit(j.charAt(mE))) mE++;
-            int mem = Integer.parseInt(j.substring(mS, mE));
-            s.append(String.format("%-15s %4d MB\n", name, mem));
+            procs[procCount][0] = name;
+            procs[procCount][1] = j.substring(mS, mE);
+            procCount++;
             pi = mE;
         }
 
+        // Two columns: services (left) + processes (right)
+        String[] sn = {"Gateway", "WiFi", "Telegram", "Kimi"};
+        String[] sk = {"\"status\":\"up\"", "\"wifi\":true", "\"telegram\":true", "\"kimi\":true"};
+        String[] von = {"OK", "ON", "Live", "OK"};
+        String[] voff = {"DOWN", "OFF", "Down", "--"};
+
+        for (int i = 0; i < 4; i++) {
+            boolean on = has(j, sk[i]);
+            String d = on ? "\u25CF" : "\u25CB";
+            String v = on ? von[i] : voff[i];
+            if (i < procCount) {
+                s.append(String.format("%s %-10s%-8s%-16s%5sM\n", d, sn[i], v, procs[i][0], procs[i][1]));
+            } else {
+                s.append(String.format("%s %-9s%s\n", d, sn[i], v));
+            }
+        }
+
+        // Extra processes (5-8) right-aligned to same edge
+        for (int i = 4; i < Math.min(procCount, 8); i++) {
+            s.append(String.format("%20s%-16s%5sM\n", "", procs[i][0], procs[i][1]));
+        }
+
+        // Info (spread across full width = 36 chars)
+        s.append('\n');
+        StringBuilder left1 = new StringBuilder();
         int si = j.indexOf("\"swap\":{");
         if (si >= 0) {
-            s.append('\n').append("Swap ").append(num(j, "\"used\":", si)).append('/').append(num(j, "\"total\":", si)).append(" MB");
+            left1.append("Swap ").append(num(j, "\"used\":", si)).append('/').append(num(j, "\"total\":", si));
         }
+        StringBuilder right1 = new StringBuilder();
         int ui = j.indexOf("\"uptime\":\"");
         if (ui >= 0) {
             int a = ui + 10, b = j.indexOf('"', a);
-            s.append("  \u2022  up: ").append(j.substring(a, b));
+            right1.append("Up ").append(j.substring(a, b));
         }
+        s.append(String.format("%-21s%21s\n", left1.toString(), right1.toString()));
+        s.append(String.format("%-21s%21s\n", "Bat " + getBatteryInfo(), "Disk " + getStorageInfo()));
+
+        // Parse logs from API
+        ArrayList<String> logs = new ArrayList<>();
+        int li = j.indexOf("\"logs\":[");
+        if (li >= 0) {
+            int pos = li + 8;
+            int end = j.indexOf(']', pos);
+            if (end > pos) {
+                String ls = j.substring(pos, end);
+                int p = 0;
+                while (logs.size() < 5) {
+                    int a = ls.indexOf('"', p);
+                    if (a < 0) break;
+                    int b = ls.indexOf('"', a + 1);
+                    if (b < 0) break;
+                    logs.add(ls.substring(a + 1, b).replaceAll("\u001b\\[[0-9;]*m", ""));
+                    p = b + 1;
+                }
+            }
+        }
+
+        // Log box (wide — matches content width)
+        s.append('\n');
+        s.append("\u250C LOG \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n");
+        if (logs.isEmpty()) {
+            s.append(String.format("\u2502 %-38s \u2502\n", "Waiting for logs..."));
+        } else {
+            for (String log : logs) {
+                if (log.length() > 38) log = log.substring(0, 38);
+                s.append(String.format("\u2502 %-38s \u2502\n", log));
+            }
+        }
+        s.append("\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518");
+
         return s.toString();
     }
 
+    private String getBatteryInfo() {
+        try {
+            Intent bs = registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+            if (bs == null) return "?";
+            int level = bs.getIntExtra(BatteryManager.EXTRA_LEVEL, -1);
+            int scale = bs.getIntExtra(BatteryManager.EXTRA_SCALE, 100);
+            int pct = level * 100 / scale;
+            boolean charging = bs.getIntExtra(BatteryManager.EXTRA_STATUS, -1) == BatteryManager.BATTERY_STATUS_CHARGING;
+            return pct + "%" + (charging ? "+" : "");
+        } catch (Exception e) { return "?"; }
+    }
+
+    private String getStorageInfo() {
+        try {
+            StatFs stat = new StatFs(Environment.getDataDirectory().getPath());
+            long freeMB = stat.getAvailableBytes() / (1024 * 1024);
+            long totalMB = stat.getTotalBytes() / (1024 * 1024);
+            if (totalMB >= 1024) {
+                return String.format("%.1f/%.1fG", freeMB / 1024.0, totalMB / 1024.0);
+            }
+            return freeMB + "/" + totalMB + "M";
+        } catch (Exception e) { return "?"; }
+    }
+
     private boolean has(String j, String k) { return j.contains(k); }
-    private String dot(String j, String k) { return has(j, k) ? "\u25CF" : "\u25CB"; }
 
     private int num(String j, String key, int from) {
         int i = j.indexOf(key, from);

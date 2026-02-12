@@ -15,7 +15,28 @@ if (typeof global.gc === "function") {
   }, 60000);
 }
 
-// 3. Dashboard — inject /dashboard, /api/status into OpenClaw's HTTP server
+// 3. Log capture for launcher dashboard (real OpenClaw logs)
+const _logBuffer = [];
+const _origLog = console.log;
+const _origErr = console.error;
+function _clean(s) {
+  return s.replace(/\x1b\[[0-9;]*m/g, '')
+          .replace(/\d{4}-\d{2}-\d{2}T(\d{2}:\d{2}):\d{2}\.\d+Z\s*/g, '$1 ');
+}
+console.log = function() {
+  const msg = _clean(Array.from(arguments).join(' '));
+  _logBuffer.push(msg.substring(0, 60));
+  if (_logBuffer.length > 8) _logBuffer.shift();
+  _origLog.apply(console, arguments);
+};
+console.error = function() {
+  const msg = "! " + _clean(Array.from(arguments).join(' '));
+  _logBuffer.push(msg.substring(0, 60));
+  if (_logBuffer.length > 8) _logBuffer.shift();
+  _origErr.apply(console, arguments);
+};
+
+// 4. Dashboard — inject /dashboard, /api/status into OpenClaw's HTTP server
 const _http = require("http");
 const _fs = require("fs");
 
@@ -81,7 +102,8 @@ function _getStatus() {
     lastError: null,
     telegram: true,
     kimi: !!(process.env.KIMI_API_KEY || process.env.MOONSHOT_API_KEY),
-    procs: _getProcs()
+    procs: _getProcs(),
+    logs: _logBuffer.slice()
   };
   try {
     const mi = _fs.readFileSync("/proc/meminfo", "utf8");

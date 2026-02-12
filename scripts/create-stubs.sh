@@ -12,10 +12,13 @@
 # Usage: bash create-stubs.sh
 # Run from Termux (not proot) — the paths go through the rootfs directly.
 # Re-run after every `openclaw update` (npm reinstalls will overwrite stubs).
+#
+# IMPORTANT: OpenClaw installs to $PREFIX/lib/node_modules/ (HOST path) because
+# start-openclaw uses --bind=$PREFIX:$PREFIX. Stubs must be at the HOST path,
+# NOT inside $ROOTFS/data/data/... (which is shadowed by the bind mount).
 
 PREFIX=/data/data/com.termux/files/usr
-ROOTFS=$PREFIX/var/lib/proot-distro/installed-rootfs/ubuntu
-OCDIR=$ROOTFS/data/data/com.termux/files/usr/lib/node_modules/openclaw/node_modules
+OCDIR=$PREFIX/lib/node_modules/openclaw/node_modules
 
 # Helper: create a stub package
 stub_pkg() {
