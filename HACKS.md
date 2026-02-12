@@ -1550,6 +1550,63 @@ pm disable com.android.keychain       # -35 MB (cert management UI)
 
 ---
 
+---
+
+### Hack #41 — APK v2 : Launcher avec escape hatches (post-brick fix)
+
+**Problème :** APK v1 (Hack #32) était un piège parfait. `FLAG_FULLSCREEN` cachait la status bar, `onBackPressed(){}` désactivait Back, et `category.HOME` bouclait le bouton Home. Quand la batterie est morte et que l'autorisation ADB a été perdue, la popup d'auth est apparue DERRIÈRE le launcher fullscreen. Impossible de l'accepter. Impossible d'accéder aux notifications. Impossible d'atteindre les Paramètres. **Factory reset obligatoire.**
+
+**La séquence de brick :**
+1. Batterie meurt → téléphone s'éteint
+2. Clés RSA ADB invalidées (déconnexion USB)
+3. Téléphone reboote → PocketClaw Launcher démarre fullscreen
+4. Branche USB → popup ADB auth apparaît DERRIÈRE le launcher
+5. Impossible de swipe la notification shade (cachée par FLAG_FULLSCREEN)
+6. Impossible d'appuyer Back (onBackPressed est vide)
+7. Impossible d'atteindre les Paramètres (aucun escape)
+8. Termux:Boot n'a pas relancé le gateway (voir Hack #42)
+9. Dashboard affiche "Waiting for boot..." pour toujours
+10. **Factory reset nécessaire** — tout perdu
+
+**Solution (5 protections) :**
+
+1. **Status bar visible :** `Theme.NoTitleBar` au lieu de `Theme.NoTitleBar.Fullscreen`. Status bar color `0xFF000A00` (matche le fond). Les dialogs système apparaissent par-dessus, notification shade accessible.
+
+2. **Triple-tap escape :** Tap "POCKETCLAW" 3x en 1 seconde → ouvre les Paramètres Android. Pas de hint visuel (anti-accident), mais fiable pour qui sait.
+
+3. **Double-back launcher chooser :** 1er Back → toast "Back again to switch launcher". 2ème Back en 2s → `Intent.createChooser` avec `CATEGORY_HOME`.
+
+4. **Bouton rouge d'urgence :** Si le gateway ne répond pas pendant 5+ minutes, un gros bouton rouge "OPEN SETTINGS" apparaît à l'écran. Visible, pas caché. Disparaît quand le gateway revient.
+
+5. **Kill switch ADB :** `adb shell am broadcast -a com.pocketclaw.EXIT` → ouvre Settings même si l'UI est bloquée. BroadcastReceiver enregistré dans onCreate, nettoyé dans onDestroy.
+
+**Ce qu'on garde :** `category.HOME` (c'est la feature), `singleTask`, `FLAG_KEEP_SCREEN_ON`, thème CRT dark, animation crabe.
+
+**Taille APK :** Toujours < 20 KB. Zéro dépendance.
+
+**Règles "never again" :**
+- Jamais disable `providers.media`
+- Jamais Dirty COW sur `app_process32`
+- Toujours un escape hatch dans le launcher
+- Toujours un second launcher installé en backup
+- Boot script avec retry loops, pas de sleeps fixes
+
+---
+
+### Hack #42 — Boot Script avec retry WiFi
+
+**Problème :** Le boot script (`boot-openclaw.sh`) faisait un `sleep 15` aveugle puis lançait tout. Pas de retry, pas de logging. Si le WiFi prenait 30 secondes au lieu de 15, tout cascadait en échec silencieux.
+
+**Solution :**
+1. **Retry loop WiFi :** Ping toutes les 5 secondes, jusqu'à 12 tentatives (60s max). Log chaque essai.
+2. **Boot logging :** Chaque étape loguée dans `$PREFIX/tmp/pocketclaw-boot.log` avec timestamp ISO.
+3. **Dégradation gracieuse :** Si WiFi pas prêt, continue (le watchdog du gateway réessaie). Si sshd/crond échouent, le reste démarre quand même.
+4. **Crons hardened :** Écriture directe au fichier crontab au lieu de pipe `crontab -` (plus fiable sur devices contraints).
+
+**Résultat :** Boot fiable même si WiFi met 45 secondes, et debug possible via `cat $PREFIX/tmp/pocketclaw-boot.log`.
+
+---
+
 *"On m'a dit que c'était impossible, alors je l'ai fait." — Probablement pas Einstein, mais on s'en fout.*
 
-*Total : ~12 heures. 40 hacks. 0 EUR de hardware. Un Moto E2 de 2015 transformé en PocketClaw OS : agent IA autonome, dashboard CRT green, setup wizard web, installer one-liner, headless server mode avec Android à 196 MB. De PoC à produit installable.*
+*Total : ~14 heures. 42 hacks. 0 EUR de hardware. Un Moto E2 de 2015 transformé en PocketClaw OS : agent IA autonome, dashboard CRT green, setup wizard web, installer one-liner, headless server mode avec Android à 196 MB. Un brick. Un factory reset. Des leçons. De PoC à produit installable.*

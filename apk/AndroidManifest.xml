@@ -9,7 +9,7 @@
 
     <application
         android:label="PocketClaw"
-        android:theme="@android:style/Theme.NoTitleBar.Fullscreen">
+        android:theme="@android:style/Theme.NoTitleBar">
         <activity android:name=".LauncherActivity"
             android:screenOrientation="portrait"
             android:launchMode="singleTask">

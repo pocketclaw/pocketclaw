@@ -5,11 +5,18 @@ import android.graphics.Typeface;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.provider.Settings;
 import android.view.Gravity;
+import android.view.View;
 import android.view.WindowManager;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -20,10 +27,17 @@ import java.net.URL;
 import java.util.ArrayList;
 
 public class LauncherActivity extends Activity {
-    private TextView crabView, statusView;
+    private TextView crabView, statusView, emergencyBtn;
+    private LinearLayout rootLayout;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Runnable fetchTask = this::fetchLoop;
     private int frame = 0;
+    private long lastBackPress = 0;
+    private long[] titleTaps = new long[3];
+    private int titleTapIndex = 0;
+    private int offlineCount = 0;
+    private static final int OFFLINE_THRESHOLD = 100; // ~5 min at 3s intervals
+    private BroadcastReceiver exitReceiver;
 
     private static final String[] DEFAULT_CRAB = {
         "          __       __\n" +
@@ -79,10 +93,17 @@ public class LauncherActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        getWindow().setFlags(
-            WindowManager.LayoutParams.FLAG_FULLSCREEN,
-            WindowManager.LayoutParams.FLAG_FULLSCREEN);
+        getWindow().setStatusBarColor(0xFF000A00);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+
+        // Kill switch: adb shell am broadcast -a com.pocketclaw.EXIT
+        exitReceiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                startActivity(new Intent(Settings.ACTION_SETTINGS));
+            }
+        };
+        registerReceiver(exitReceiver, new IntentFilter("com.pocketclaw.EXIT"));
 
         float d = getResources().getDisplayMetrics().density;
         ScrollView scroll = new ScrollView(this);
@@ -90,12 +111,24 @@ public class LauncherActivity extends Activity {
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding((int)(16*d), (int)(24*d), (int)(16*d), (int)(16*d));
+        root.setPadding((int)(16*d), (int)(8*d), (int)(16*d), (int)(16*d));
 
         // Title
         TextView title = mono("POCKETCLAW", 24, 0xFFFFFFFF);
         title.setGravity(Gravity.CENTER);
         title.setLetterSpacing(0.3f);
+        title.setOnClickListener(v -> {
+            titleTaps[titleTapIndex % 3] = System.currentTimeMillis();
+            titleTapIndex++;
+            if (titleTapIndex >= 3) {
+                long first = titleTaps[(titleTapIndex - 3) % 3];
+                long last = titleTaps[(titleTapIndex - 1) % 3];
+                if (last - first < 1000) {
+                    startActivity(new Intent(Settings.ACTION_SETTINGS));
+                    titleTapIndex = 0;
+                }
+            }
+        });
         root.addView(title);
 
         // Subtitle
@@ -123,6 +156,20 @@ public class LauncherActivity extends Activity {
         ft.setPadding(0, (int)(8*d), 0, 0);
         root.addView(ft);
 
+        // Emergency button — hidden until gateway is down 5+ minutes
+        emergencyBtn = new TextView(this);
+        emergencyBtn.setText("\u26A0  OPEN SETTINGS");
+        emergencyBtn.setTextSize(16);
+        emergencyBtn.setTextColor(0xFFFFFFFF);
+        emergencyBtn.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
+        emergencyBtn.setBackgroundColor(0xFFCC0000);
+        emergencyBtn.setGravity(Gravity.CENTER);
+        emergencyBtn.setPadding((int)(16*d), (int)(14*d), (int)(16*d), (int)(14*d));
+        emergencyBtn.setVisibility(View.GONE);
+        emergencyBtn.setOnClickListener(v -> startActivity(new Intent(Settings.ACTION_SETTINGS)));
+        root.addView(emergencyBtn);
+
+        rootLayout = root;
         scroll.addView(root);
         setContentView(scroll);
         fetchLoop();
@@ -151,14 +198,18 @@ public class LauncherActivity extends Activity {
                 while ((line = r.readLine()) != null) sb.append(line);
                 r.close();
                 display = format(sb.toString());
+                offlineCount = 0;
             } catch (Exception e) {
                 display = "\u25CB Gateway    OFFLINE\n\nWaiting for boot...";
+                offlineCount++;
             }
             final String d = display;
+            final boolean showEmergency = offlineCount >= OFFLINE_THRESHOLD;
             handler.post(() -> {
                 statusView.setText(d);
                 crabView.setText(crab[frame % 2]);
                 frame++;
+                emergencyBtn.setVisibility(showEmergency ? View.VISIBLE : View.GONE);
             });
             handler.postDelayed(fetchTask, 3000);
         }).start();
@@ -227,5 +278,22 @@ public class LauncherActivity extends Activity {
     }
 
     @Override
-    public void onBackPressed() {}
+    public void onBackPressed() {
+        long now = System.currentTimeMillis();
+        if (now - lastBackPress < 2000) {
+            Intent chooser = new Intent(Intent.ACTION_MAIN);
+            chooser.addCategory(Intent.CATEGORY_HOME);
+            chooser.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(Intent.createChooser(chooser, "Choose launcher"));
+        } else {
+            lastBackPress = now;
+            Toast.makeText(this, "Back again to switch launcher", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        if (exitReceiver != null) unregisterReceiver(exitReceiver);
+    }
 }

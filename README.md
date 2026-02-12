@@ -52,9 +52,9 @@ Bot:     "I'm running on a Moto E2 from 2015 with 1GB of RAM.
 - **Fully autonomous** — watchdog + health checks auto-restart on crash or freeze, survives reboots
 - **`pocketclaw` CLI** — `start`, `stop`, `restart`, `status`, `logs`, `monitor` from one command
 - **RAM-optimized** — 178 MB RSS with V8 heap 128 MB, periodic GC, ESM stubs, and a live dashboard — on hardware that has 1 GB total
-- **30 documented hacks** — every impossible problem we hit, and how we solved it
+- **42 documented hacks** — every impossible problem we hit, and how we solved it
 - **Live dashboard** — CRT-style status page on the phone screen (Gateway, WiFi, RAM, Telegram, errors — auto-refresh every 3s)
-- **Custom launcher APK** — 8.5 KB WebView app replaces the home screen with the dashboard
+- **Custom launcher APK** — Native dashboard replaces the home screen (escape hatches: triple-tap Settings, double-back launcher switch, emergency button after 5 min offline, ADB kill switch)
 
 ## The Hardware
 

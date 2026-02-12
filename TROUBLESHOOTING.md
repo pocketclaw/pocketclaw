@@ -176,3 +176,41 @@ adb shell 'echo "pm disable com.example.app" | /system/bin/run-as'
 ```
 
 **Note :** Les effets de `pm disable` persistent au reboot (écrits dans `package-restrictions.xml`). Seul le root Dirty COW est perdu.
+
+---
+
+## 11. Launcher bloque l'écran / popup ADB cachée
+
+**Symptôme :** Le launcher PocketClaw couvre tout l'écran. Les dialogs système (autorisation ADB) apparaissent derrière et sont inaccessibles. Back ne fait rien. Home boucle sur le launcher.
+
+**Cause :** APK v1 utilisait `FLAG_FULLSCREEN` + `Theme.NoTitleBar.Fullscreen` + `onBackPressed(){}` vide tout en étant HOME launcher. Aucune sortie possible.
+
+**Prévention (APK v2) :**
+- Status bar visible (dialogs système apparaissent par-dessus)
+- Triple-tap sur "POCKETCLAW" ouvre les Paramètres Android
+- Double-back (2x en 2 secondes) ouvre le sélecteur de launcher
+- Bouton rouge "OPEN SETTINGS" apparaît après 5 min de gateway offline
+- Kill switch ADB : `adb shell am broadcast -a com.pocketclaw.EXIT`
+
+**Récupération si bloqué sur APK v1 :**
+
+1. **Si ADB est autorisé :**
+   ```bash
+   adb uninstall com.pocketclaw.launcher
+   ```
+
+2. **Si ADB unauthorized (popup cachée derrière le launcher) :**
+   - Factory reset depuis le recovery mode (Power + Volume Bas → Recovery → Wipe data)
+   - Après le reset, installer APK v2 (avec escape hatches)
+
+3. **Si le téléphone ne répond plus :**
+   - Power 15 secondes pour forcer le reboot
+   - Connecter USB avant que le launcher se lance
+   - `adb uninstall com.pocketclaw.launcher`
+
+**Règles "never again" :**
+- Toujours un escape hatch dans le launcher
+- Toujours un second launcher installé en backup
+- Jamais `FLAG_FULLSCREEN` sur un HOME launcher
+- Jamais `onBackPressed(){}` vide
+- Boot script avec retry loops, pas de sleeps fixes
