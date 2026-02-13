@@ -1,7 +1,7 @@
 <div align="center">
 
 ```
- ██╗██╗██╗ ██╗██╗██╗██╗██╗██╗██╗██╗██╗██╗
+ ██████╗  ██████╗  ██████╗██╗  ██╗███████╗████████╗ ██████╗██╗      █████╗ ██╗    ██╗
  ██╔══██╗██╔═══██╗██╔════╝██║ ██╔╝██╔════╝╚══██╔══╝██╔════╝██║     ██╔══██╗██║    ██║
  ██████╔╝██║   ██║██║     █████╔╝ █████╗     ██║   ██║     ██║     ███████║██║ █╗ ██║
  ██╔═══╝ ██║   ██║██║     ██╔═██╗ ██╔══╝     ██║   ██║     ██║     ██╔══██║██║███╗██║
@@ -31,49 +31,43 @@
 
 ## The Dashboard
 
-```
-     P O C K E T C L A W
-      MOTO E2 • 1GB • ANDROID 6
-
-              / ¯<`         `> ¯\
-             (   / @       @ \   )
-              \(__ _\_/_ __)/
-            (\ `-/   .  .   \-` /)
-            "===\  / ... \  /==="
-              .==')(.:::::.)(` ==.
-            '  .='  ':::::' `=.  '
-            / /  .::::::::::.  \ \
-           | | (::::::::::::) | |
-            \ \  '::::::::' / /
-             \ \  | || |  / /
-            '-.\|__|__|/.-'
-                ^^    ^^
-
-     ● Gateway    200 OK
-     ● WiFi       Online
-     ● Telegram   Live
-     ● Kimi K2.5  Connected
-
-     RAM  382/898 MB (43%)
-     ████████░░░░░░░░░░░░
-
-     TOP PROCESSES
-     openclaw-gatewa  205 MB
-     launcher          53 MB
-     termux            49 MB
-     openclaw          34 MB
-
-     Swap 4/256 MB  •  up: 3d 12h
-
-          V8 160MB • PROOT • NODE 22 • KIMI
-```
-
 The native launcher replaces the home screen with a CRT-style dashboard. Red crab, green text, live stats — all running on a phone from 2015.
 
 <div align="center">
 <img src="crab-final.png" alt="PocketClaw Dashboard" width="270">
 <img src="crab-screenshot3.png" alt="PocketClaw Crab v2" width="270">
 </div>
+
+```
+┌──────────────────────────────────────────┐
+│         P O C K E T C L A W              │
+│          MOTO E2 • 1GB • ANDROID 6       │
+│                                          │
+│              __       __                 │
+│             / <`     `> \                │
+│            (  / @   @ \  )               │
+│             \(  \_-_/  )/                │
+│           (\ `-/     \-` /)             │
+│            "==/   _   \=="               │
+│             .=') [_] (`=.                │
+│            ' .='     `=. '               │
+│                                          │
+│  ● Gateway    200 OK    openclaw  205 MB │
+│  ● WiFi       Online    launcher   53 MB │
+│  ● Telegram   Live      termux     49 MB │
+│  ● Kimi K2.5  Connected openclaw   34 MB │
+│                                          │
+│  RAM  382/898 MB (43%)                   │
+│  ████████░░░░░░░░░░░░                    │
+│                                          │
+│  Swap 4/256 MB  •  up: 3d 12h           │
+│                                          │
+│       V8 160MB • PROOT • NODE 22 • KIMI  │
+│  ┌──────┬──────┬──────┬──────┐           │
+│  │  ⚙   │  ◔   │  ■   │  ◀  │           │
+│  └──────┴──────┴──────┴──────┘           │
+└──────────────────────────────────────────┘
+```
 
 ---
 
