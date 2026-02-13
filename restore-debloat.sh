@@ -1,6 +1,6 @@
 #!/bin/bash
-# PocketClaw Debloat v2 — restore after factory reset
-# Removes 119 packages, leaves 25 active
+# PocketClaw Debloat v3 — restore after factory reset
+# Removes 125 packages, leaves 19 active
 # NOTE: GMS requires device admin deactivation first:
 #   Settings > Security > Device Administrators > disable "Gestionnaire d'appareils Android"
 #   Then run this script.
@@ -134,5 +134,23 @@ adb shell pm uninstall -k --user 0 com.qualcomm.atfwd
 adb shell pm uninstall -k --user 0 com.qualcomm.location
 adb shell pm uninstall -k --user 0 com.qualcomm.timeservice
 
-echo "Debloat v2 complete. 119 packages removed."
-echo "Remaining: 25 packages (android core + termux + pocketclaw)"
+# Round 4: Telephony stack (no SIM needed)
+adb shell pm uninstall -k --user 0 com.android.phone
+adb shell pm uninstall -k --user 0 com.android.server.telecom
+adb shell pm uninstall -k --user 0 com.android.providers.telephony
+adb shell pm uninstall -k --user 0 com.qualcomm.qcrilmsgtunnel
+
+# Round 4: Motorola remaining non-critical
+adb shell pm uninstall -k --user 0 com.motorola.android.dm.service
+adb shell pm uninstall -k --user 0 com.motorola.slpc_sys
+
+# System tuning (server mode)
+adb shell settings put global policy_control immersive.full=*
+adb shell settings put global window_animation_scale 0
+adb shell settings put global transition_animation_scale 0
+adb shell settings put global animator_duration_scale 0
+adb shell settings put system screen_brightness 0
+adb shell settings put system screen_off_timeout 15000
+
+echo "Debloat v3 complete. 125 packages removed, 19 remaining."
+echo "System tuning applied (immersive, no animations, brightness 0)."

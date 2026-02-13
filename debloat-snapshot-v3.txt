@@ -1,0 +1,60 @@
+# PocketClaw Debloat Snapshot v3 — 2026-02-13
+# 19 active packages (down from 144 original, 25 at v2)
+# Round 4: removed telephony stack (phone, telecom, providers.telephony, qcrilmsgtunnel)
+#          + removed motorola dm.service, slpc_sys
+# Optimizations: immersive mode, animations off, brightness 0, screen timeout 15s
+
+## Active packages (19):
+package:android
+package:com.android.defcontainer
+package:com.android.externalstorage
+package:com.android.inputdevices
+package:com.android.keychain
+package:com.android.providers.downloads
+package:com.android.providers.downloads.ui
+package:com.android.providers.media
+package:com.android.providers.settings
+package:com.android.settings
+package:com.android.shell
+package:com.android.systemui
+package:com.google.android.packageinstaller
+package:com.google.android.webview
+package:com.motorola.android.providers.settings
+package:com.motorola.android.sepolicyupdate
+package:com.pocketclaw.launcher
+package:com.termux
+package:com.termux.boot
+
+## RAM (bot running, gateway up):
+#   Swap: 4 MB / 255 MB
+#   Free: 26 MB
+#   Cached: ~560 MB (reclaimable)
+#
+# Key processes RSS:
+#   openclaw-gateway  208 MB
+#   system_server      99 MB
+#   systemui           86 MB
+#   pocketclaw.launcher 52 MB
+#   process.media      50 MB (persistent, respawns)
+#   termux             49 MB
+#   termux.boot        40 MB
+#   openclaw           34 MB
+#   mediaserver        16 MB
+#   surfaceflinger     12 MB
+#   native daemons    ~70 MB total
+#
+# Android system total (no bot): ~314 MB
+# com.android.phone: GONE (telephony removed, WiFi still works)
+
+## System settings applied:
+# immersive.full=*          (hide status+nav bar)
+# window_animation_scale=0
+# transition_animation_scale=0
+# animator_duration_scale=0
+# screen_brightness=0
+# screen_off_timeout=15000
+
+## Comparison
+#              v0(orig)  v1(R1+R2)  v2(R3)  v3(R4+tuning)
+# Packages:    144       73         25      19
+# Swap used:   87 MB     3 MB       8 MB    4 MB
