@@ -1,0 +1,33 @@
+# PocketClaw RAM Snapshot v2 — 2026-02-13 (post-Round 3 debloat, bot running)
+# 144 → 25 packages (119 removed)
+
+## Memory Summary
+MemTotal:    898 MB
+MemFree:      85 MB
+Cached:      410 MB (reclaimable)
+Swap Used:     8 MB / 255 MB
+Available:  ~495 MB (free + cached)
+
+## Comparison
+              v0 (pre)    v1 (R1+R2)    v2 (R3)
+Packages:     144         73            25
+Swap used:    87 MB       3 MB          8 MB
+Cached:       300 MB      420 MB        410 MB
+
+## Process List (userspace, sorted by RSS)
+# USER       PID   VSIZE   RSS(KB) NAME
+u0_a96       4861  330880  189580  openclaw-gateway
+system       2254  840692  102020  system_server
+u0_a36       3325  702980   85556  com.android.systemui
+u0_a96       4793  715276   77188  com.termux
+radio        3813  662456   57788  com.android.phone
+u0_a95       3836  664652   53052  com.pocketclaw.launcher
+u0_a96       4325  648448   40796  com.termux.boot
+u0_a11       3293  646924   49788  android.process.media
+system       3954  654136   41896  com.android.settings
+u0_a8        4226  643456   40740  com.motorola.android.dm.service
+u0_a12       3340  640512   40208  com.android.externalstorage
+radio        4279  643704   40044  com.qualcomm.qcrilmsgtunnel
+system       3353  640524   40412  com.motorola.process.slpc
+u0_a96       4206  640576   39592  com.android.keychain
+u0_a96       4849  187784   34648  openclaw

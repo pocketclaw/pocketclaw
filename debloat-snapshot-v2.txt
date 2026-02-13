@@ -1,3 +1,9 @@
+# PocketClaw Debloat Snapshot v2 — 2026-02-13
+# 25 active packages (down from 144 original, 73 at v1)
+# Round 3: removed 18 Google + 19 Android system packages
+# Motorola packages kept (risk of factory reset)
+
+## Active packages (25):
 package:android
 package:com.android.defcontainer
 package:com.android.externalstorage
@@ -23,3 +29,18 @@ package:com.pocketclaw.launcher
 package:com.qualcomm.qcrilmsgtunnel
 package:com.termux
 package:com.termux.boot
+
+## RAM after reboot (bot running):
+#   Swap: 8 MB used (vs 87 MB pre-debloat, 3 MB at v1)
+#   Free: 85 MB
+#   Cached: 410 MB (reclaimable)
+#   Total available (free+cached): ~495 MB
+#
+# Key processes RSS:
+#   system_server    102 MB
+#   systemui          85 MB
+#   openclaw-gateway 190 MB
+#   openclaw          35 MB
+#   termux            77 MB
+#   com.android.phone 57 MB
+#   pocketclaw.launcher 53 MB

@@ -1,10 +1,11 @@
 #!/bin/bash
-adb shell pm uninstall -k --user 0 com.android.cellbroadcastreceiver
-adb shell pm uninstall -k --user 0 com.android.chrome
-adb shell pm uninstall -k --user 0 com.android.documentsui
-adb shell pm uninstall -k --user 0 com.android.mms
-adb shell pm uninstall -k --user 0 com.android.providers.calendar
-adb shell pm uninstall -k --user 0 com.android.vending
+# PocketClaw Debloat v2 — restore after factory reset
+# Removes 119 packages, leaves 25 active
+# NOTE: GMS requires device admin deactivation first:
+#   Settings > Security > Device Administrators > disable "Gestionnaire d'appareils Android"
+#   Then run this script.
+
+# Round 1+2: Google apps
 adb shell pm uninstall -k --user 0 com.google.android.apps.docs
 adb shell pm uninstall -k --user 0 com.google.android.apps.docs.editors.docs
 adb shell pm uninstall -k --user 0 com.google.android.apps.inputmethod.hindi
@@ -23,6 +24,28 @@ adb shell pm uninstall -k --user 0 com.google.android.talk
 adb shell pm uninstall -k --user 0 com.google.android.tts
 adb shell pm uninstall -k --user 0 com.google.android.videos
 adb shell pm uninstall -k --user 0 com.google.android.youtube
+
+# Round 3: Google remaining
+adb shell pm uninstall -k --user 0 com.google.android.apps.books
+adb shell pm uninstall -k --user 0 com.google.android.apps.cloudprint
+adb shell pm uninstall -k --user 0 com.google.android.backuptransport
+adb shell pm uninstall -k --user 0 com.google.android.calendar
+adb shell pm uninstall -k --user 0 com.google.android.configupdater
+adb shell pm uninstall -k --user 0 com.google.android.deskclock
+adb shell pm uninstall -k --user 0 com.google.android.feedback
+adb shell pm uninstall -k --user 0 com.google.android.gallery3d
+adb shell pm uninstall -k --user 0 com.google.android.gm.exchange
+adb shell pm uninstall -k --user 0 com.google.android.inputmethod.korean
+adb shell pm uninstall -k --user 0 com.google.android.inputmethod.pinyin
+adb shell pm uninstall -k --user 0 com.google.android.launcher
+adb shell pm uninstall -k --user 0 com.google.android.marvin.talkback
+adb shell pm uninstall -k --user 0 com.google.android.onetimeinitializer
+adb shell pm uninstall -k --user 0 com.google.android.partnersetup
+adb shell pm uninstall -k --user 0 com.google.android.play.games
+adb shell pm uninstall -k --user 0 com.google.android.setupwizard
+adb shell pm uninstall -k --user 0 com.google.android.syncadapters.contacts
+
+# Round 1+2: Motorola bloat (safe to remove)
 adb shell pm uninstall -k --user 0 com.lmi.motorola.rescuesecurity
 adb shell pm uninstall -k --user 0 com.motorola.actions
 adb shell pm uninstall -k --user 0 com.motorola.android.fmradio
@@ -66,6 +89,50 @@ adb shell pm uninstall -k --user 0 com.motorola.setup
 adb shell pm uninstall -k --user 0 com.motorola.slpc
 adb shell pm uninstall -k --user 0 com.motorola.storageoptimizer
 adb shell pm uninstall -k --user 0 com.motorola.wappushsi
+
+# Round 1+2: Android system
+adb shell pm uninstall -k --user 0 com.android.cellbroadcastreceiver
+adb shell pm uninstall -k --user 0 com.android.chrome
+adb shell pm uninstall -k --user 0 com.android.documentsui
+adb shell pm uninstall -k --user 0 com.android.mms
+adb shell pm uninstall -k --user 0 com.android.providers.calendar
+adb shell pm uninstall -k --user 0 com.android.vending
+
+# Round 3: Android system
+adb shell pm uninstall -k --user 0 com.android.backupconfirm
+adb shell pm uninstall -k --user 0 com.android.bluetooth
+adb shell pm uninstall -k --user 0 com.android.bluetoothmidiservice
+adb shell pm uninstall -k --user 0 com.android.bookmarkprovider
+adb shell pm uninstall -k --user 0 com.android.calculator2
+adb shell pm uninstall -k --user 0 com.android.captiveportallogin
+adb shell pm uninstall -k --user 0 com.android.carrierconfig
+adb shell pm uninstall -k --user 0 com.android.certinstaller
+adb shell pm uninstall -k --user 0 com.android.contacts
+adb shell pm uninstall -k --user 0 com.android.dialer
+adb shell pm uninstall -k --user 0 com.android.dreams.basic
+adb shell pm uninstall -k --user 0 com.android.facelock
+adb shell pm uninstall -k --user 0 com.android.htmlviewer
+adb shell pm uninstall -k --user 0 com.android.location.fused
+adb shell pm uninstall -k --user 0 com.android.managedprovisioning
+adb shell pm uninstall -k --user 0 com.android.mms.service
+adb shell pm uninstall -k --user 0 com.android.pacprocessor
+adb shell pm uninstall -k --user 0 com.android.printspooler
+adb shell pm uninstall -k --user 0 com.android.providers.calllogbackup
+adb shell pm uninstall -k --user 0 com.android.providers.contacts
+adb shell pm uninstall -k --user 0 com.android.providers.partnerbookmarks
+adb shell pm uninstall -k --user 0 com.android.providers.userdictionary
+adb shell pm uninstall -k --user 0 com.android.proxyhandler
+adb shell pm uninstall -k --user 0 com.android.sharedstoragebackup
+adb shell pm uninstall -k --user 0 com.android.statementservice
+adb shell pm uninstall -k --user 0 com.android.stk
+adb shell pm uninstall -k --user 0 com.android.vpndialogs
+adb shell pm uninstall -k --user 0 com.android.wallpaper.livepicker
+adb shell pm uninstall -k --user 0 com.android.wallpapercropper
+
+# Round 1+2: Qualcomm
 adb shell pm uninstall -k --user 0 com.qualcomm.atfwd
 adb shell pm uninstall -k --user 0 com.qualcomm.location
 adb shell pm uninstall -k --user 0 com.qualcomm.timeservice
+
+echo "Debloat v2 complete. 119 packages removed."
+echo "Remaining: 25 packages (android core + termux + pocketclaw)"
