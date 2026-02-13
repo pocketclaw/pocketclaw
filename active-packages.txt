@@ -9,7 +9,6 @@ package:com.android.providers.media
 package:com.android.providers.settings
 package:com.android.settings
 package:com.android.shell
-package:com.android.systemui
 package:com.google.android.packageinstaller
 package:com.google.android.webview
 package:com.motorola.android.providers.settings

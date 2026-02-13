@@ -1,6 +1,6 @@
 #!/data/data/com.termux/files/usr/bin/bash
 # Termux:Boot auto-start script for PocketClaw
-# Install: cp boot-openclaw.sh ~/.termux/boot/start-pocketclaw.sh
+# Install: cp start-pocketclaw.sh ~/.termux/boot/start-pocketclaw.sh
 
 PREFIX=/data/data/com.termux/files/usr
 LOGFILE="$PREFIX/tmp/pocketclaw-boot.log"
@@ -8,9 +8,6 @@ LOGFILE="$PREFIX/tmp/pocketclaw-boot.log"
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$LOGFILE"; }
 
 log "=== BOOT START ==="
-
-# NOTE: boot-debloat requires ADB shell (Dirty COW can't open /system/bin/run-as from Termux).
-# After reboot with USB connected, run: adb shell /data/local/tmp/boot-debloat.sh
 
 # Wait for WiFi with retry (check every 5s, up to 60s)
 WIFI_READY=0
@@ -52,14 +49,6 @@ else
   crond 2>/dev/null && log "crond started" || log "WARNING: crond not found"
 fi
 
-# Kill dormant Android services that respawn (saves ~120 MB)
-sleep 10
-am force-stop com.android.settings 2>/dev/null
-am force-stop com.android.keychain 2>/dev/null
-am force-stop com.android.externalstorage 2>/dev/null
-am force-stop com.android.defcontainer 2>/dev/null
-log "Dormant services force-stopped"
-
 # Start the hardware monitor
 nohup monitor </dev/null >/dev/null 2>&1 &
 log "monitor started (PID $!)"
@@ -67,5 +56,36 @@ log "monitor started (PID $!)"
 # Start the gateway
 nohup start-openclaw > "$PREFIX/tmp/openclaw-gateway.log" 2>&1 &
 log "Gateway started (PID $!)"
+
+# Wait for gateway to be up
+sleep 30
+
+# Kill SystemUI (uninstalled but may respawn as zombie)
+(while true; do am force-stop com.android.systemui 2>/dev/null; sleep 60; done) &
+log "SystemUI killer started (PID $!)"
+
+# NOTE: Do NOT force-stop com.termux.boot — it sets the "stopped" flag
+# which prevents BOOT_COMPLETED broadcast on next reboot = bot won't auto-start
+
+# Kill dormant services (first pass)
+am force-stop com.android.settings 2>/dev/null
+am force-stop com.android.keychain 2>/dev/null
+am force-stop com.android.externalstorage 2>/dev/null
+am force-stop com.android.defcontainer 2>/dev/null
+am force-stop com.android.providers.downloads 2>/dev/null
+am force-stop com.android.providers.downloads.ui 2>/dev/null
+am force-stop com.google.android.packageinstaller 2>/dev/null
+am force-stop com.google.android.webview 2>/dev/null
+am force-stop com.motorola.android.providers.settings 2>/dev/null
+log "Dormant services force-stopped (9 packages)"
+
+# Repeat dormant kills every 5 min (they respawn)
+(while true; do
+  sleep 300
+  am force-stop com.android.settings 2>/dev/null
+  am force-stop com.android.keychain 2>/dev/null
+  am force-stop com.android.externalstorage 2>/dev/null
+done) &
+log "Dormant killer loop started (PID $!)"
 
 log "=== BOOT COMPLETE ==="

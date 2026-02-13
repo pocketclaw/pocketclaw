@@ -1,6 +1,6 @@
 #!/bin/bash
-# PocketClaw Debloat v4 — restore after factory reset
-# Removes 125 packages, leaves 19 active, optimizes SystemUI
+# PocketClaw Debloat v5 — restore after factory reset
+# Removes 126 packages (incl SystemUI), leaves 18 active
 # NOTE: GMS requires device admin deactivation first:
 #   Settings > Security > Device Administrators > disable "Gestionnaire d'appareils Android"
 #   Then run this script.
@@ -157,6 +157,16 @@ adb shell settings put secure icon_blacklist "bluetooth,hotspot,alarm,zen,rotate
 adb shell settings put global low_power 1
 # NOTE: Do NOT set policy_control immersive.full=* — hides nav bar in ALL apps, user gets stuck
 
-echo "Debloat v4 complete. 125 packages removed, 19 remaining."
-echo "System tuning + SystemUI optimization applied."
-echo "SystemUI: ~43 MB (optimized). Android total: ~170 MB."
+# Round 5: Kill SystemUI (launcher v2.3 has nav buttons)
+adb shell pm uninstall -k --user 0 com.android.systemui
+
+echo "Debloat v5 complete. 126 packages removed, 18 remaining."
+echo "SystemUI: DEAD. Android system: ~90 MB."
+echo ""
+echo "NEXT STEPS:"
+echo "  1. Deploy start-openclaw with --max-old-space-size=160"
+echo "  2. Deploy start-pocketclaw.sh to ~/.termux/boot/"
+echo "  3. Install PocketClaw Launcher v2.3 APK"
+echo "  4. Reboot"
+echo ""
+echo "WARNING: Do NOT force-stop com.termux.boot (breaks auto-reboot)"

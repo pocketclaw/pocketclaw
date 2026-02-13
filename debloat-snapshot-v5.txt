@@ -1,0 +1,76 @@
+# PocketClaw Debloat Snapshot v5 — 2026-02-13
+# 18 active packages (SystemUI uninstalled for user 0)
+# Gateway heap: 160 MB (was 192)
+# SystemUI: DEAD (pm uninstall -k --user 0)
+# Dormant killer loop every 5 min in boot script
+
+## Active packages (18):
+package:android
+package:com.android.defcontainer
+package:com.android.externalstorage
+package:com.android.inputdevices
+package:com.android.keychain
+package:com.android.providers.downloads
+package:com.android.providers.downloads.ui
+package:com.android.providers.media
+package:com.android.providers.settings
+package:com.android.settings
+package:com.android.shell
+package:com.google.android.packageinstaller
+package:com.google.android.webview
+package:com.motorola.android.providers.settings
+package:com.motorola.android.sepolicyupdate
+package:com.pocketclaw.launcher
+package:com.termux
+package:com.termux.boot
+
+## RAM (bot running, SystemUI dead, dormants killed):
+#   Total: 898 MB
+#   Used:  836 MB (includes cache)
+#   Free:  61 MB (reclaimable cache ~500 MB)
+#   Swap:  4 MB / 255 MB
+#
+# Process RSS:
+#   openclaw-gateway    205 MB  (heap 160 MB + V8 overhead)
+#   system_server       105 MB
+#   pocketclaw.launcher  53 MB
+#   termux               49 MB
+#   termux.boot          40 MB  (DO NOT kill — breaks auto-reboot)
+#   openclaw             34 MB
+#   mediaserver          16 MB
+#   surfaceflinger       12 MB
+#   native daemons      ~45 MB  (root, unkillable without root)
+#
+# NOT running: SystemUI (0 MB), settings, keychain, externalstorage,
+#              defcontainer, downloads, packageinstaller, webview,
+#              motorola.providers.settings, android.process.media
+
+## System settings:
+# sysui_qs_tiles=''
+# icon_blacklist=bluetooth,hotspot,alarm,zen,rotate,cell,airplane,cast,location,nfc
+# low_power=1
+# window_animation_scale=0
+# transition_animation_scale=0
+# animator_duration_scale=0
+# screen_brightness=0
+# screen_off_timeout=15000
+# policy_control=null (system nav bar needed if SystemUI ever comes back)
+
+## Restore steps (after factory reset):
+# 1. Run restore-debloat.sh (removes 125 packages + system tuning)
+# 2. adb shell pm uninstall -k --user 0 com.android.systemui
+# 3. Deploy start-openclaw with --max-old-space-size=160
+# 4. Deploy start-pocketclaw.sh to ~/.termux/boot/
+# 5. Install PocketClaw Launcher v2.3 APK
+# 6. Reboot
+
+## Comparison
+#              v0(orig)  v1      v2      v3      v4        v5
+# Packages:    144       73      25      19      19        18
+# SystemUI:    86 MB     86 MB   86 MB   86 MB   43 MB     0 MB
+# Gateway:     -         -       -       -       231 MB    205 MB
+# Swap:        87 MB     3 MB    8 MB    4 MB    2 MB      4 MB
+# Android sys: ~450 MB   ~350    ~314    ~314    ~170      ~90 MB
+
+## CRITICAL: Do NOT force-stop com.termux.boot
+# Sets "stopped" flag → no BOOT_COMPLETED → bot won't auto-start on reboot
