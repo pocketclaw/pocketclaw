@@ -1,0 +1,123 @@
+# PocketClaw Debloat Snapshot v6 — 2026-02-13
+# 13 active packages (v5 was 18 — removed 5 more)
+# Gateway heap: 160 MB, single process (OPENCLAW_NO_RESPAWN=1)
+# SystemUI: DEAD (pm uninstall -k --user 0)
+# Boot: fully automatic (termux.boot → start-pocketclaw.sh)
+# Dashboard: PocketClaw launcher = HOME screen on boot
+# Dormant killer + SystemUI killer loops active
+# Session path validation bypassed (throw → console.warn in 4 paths-*.js)
+# 9 OpenClaw cron jobs disabled (were starving Telegram messages)
+# Session transcripts cleaned (220 files / 31 MB → 1 file / 1.1 MB)
+
+## Active packages (13):
+package:android
+package:com.android.defcontainer
+package:com.android.inputdevices
+package:com.android.providers.settings
+package:com.android.settings
+package:com.android.shell
+package:com.google.android.packageinstaller
+package:com.google.android.webview
+package:com.motorola.android.providers.settings
+package:com.motorola.android.sepolicyupdate
+package:com.pocketclaw.launcher
+package:com.termux
+package:com.termux.boot
+
+## Removed since v5 (5 packages):
+# com.android.externalstorage        — shared android.process.media
+# com.android.keychain               — shared android.process.media
+# com.android.providers.downloads    — shared android.process.media
+# com.android.providers.downloads.ui — shared android.process.media
+# com.android.providers.media        — shared android.process.media
+
+## RAM (PSS — bot running, auto-boot, dashboard on screen):
+#   Total:  898 MB
+#   Used:   445 MB (393 MB PSS + 52 MB kernel)
+#   Free:   450 MB (44 MB free + 397 MB cached kernel + 9 MB cached PSS)
+#   Swap:   1 MB / 256 MB
+#
+# Process PSS:
+#   openclaw-gateway     186 MB  (heap 160 MB, single process, no supervisor)
+#   system_server         70 MB
+#   pocketclaw.launcher   33 MB  (dashboard, HOME screen)
+#   zygote                24 MB  (shared, fork parent)
+#   com.termux            16 MB  (down from 55 MB after clean reboot)
+#   surfaceflinger        11 MB
+#   mediaserver           11 MB
+#   com.termux.boot        9 MB  (auto-start, DO NOT force-stop)
+#   rild                   6 MB  (no root to kill)
+#   mm-pp-daemon           4 MB  (no root to kill)
+#   mm-qcamera-daemon      4 MB  (no root to kill)
+#   drmserver              2 MB  (no root to kill)
+#   wpa_supplicant         2 MB  (needed for WiFi)
+#   other native daemons  ~15 MB (no root to kill)
+#
+# NOT running: SystemUI (0 MB), externalstorage, keychain,
+#              downloads, providers.media, android.process.media
+
+## Boot flow (fully automatic):
+# 1. Phone boots → Android starts → BOOT_COMPLETED broadcast
+# 2. com.termux.boot receives broadcast → runs ~/.termux/boot/start-pocketclaw.sh
+# 3. start-pocketclaw.sh:
+#    a. Waits for WiFi (up to 60s)
+#    b. Starts sshd
+#    c. Starts crond (wifi-watchdog, healthcheck, logrotate)
+#    d. Starts openclaw-gateway (via start-openclaw)
+#    e. Kills SystemUI every 60s (loop)
+#    f. Force-stops 9 dormant packages
+#    g. Kills dormant packages every 5 min (loop)
+# 4. PocketClaw launcher is HOME app → dashboard shows on screen
+
+## OpenClaw fixes applied:
+# - Session path validation: throw → console.warn in 4 paths-*.js files
+#   (paths-mF4iWwgm.js, paths-CnE9bV4t.js, paths-B49s6UZQ.js, paths-C7j5gEli.js)
+# - Cron jobs: all 9 disabled in /root/.openclaw/cron/jobs.json
+# - LLM config: Kimi primary, OpenAI gpt-4o-mini fallback (groq removed)
+# - GROQ_API_KEY placeholder removed from env
+
+## System settings:
+# sysui_qs_tiles=''
+# icon_blacklist=bluetooth,hotspot,alarm,zen,rotate,cell,airplane,cast,location,nfc
+# low_power=1
+# window_animation_scale=0
+# transition_animation_scale=0
+# animator_duration_scale=0
+# screen_brightness=0
+# screen_off_timeout=15000
+
+## Restore steps (after factory reset):
+# 1. Run restore-debloat.sh (removes 125+ packages + system tuning)
+# 2. adb shell pm uninstall -k --user 0 com.android.systemui
+# 3. adb shell pm uninstall -k --user 0 com.android.providers.downloads
+# 4. adb shell pm uninstall -k --user 0 com.android.providers.downloads.ui
+# 5. adb shell pm uninstall -k --user 0 com.android.externalstorage
+# 6. adb shell pm uninstall -k --user 0 com.android.keychain
+# 7. adb shell pm uninstall -k --user 0 com.android.providers.media
+# 8. Deploy start-openclaw to ~/
+# 9. Deploy start-pocketclaw.sh to ~/.termux/boot/
+# 10. Install PocketClaw Launcher v2.3 APK
+# 11. Patch 4 paths-*.js files (session validation bypass)
+# 12. Disable all cron jobs in /root/.openclaw/cron/jobs.json
+# 13. Reboot
+
+## Comparison
+#              v0(orig)  v1    v2    v3    v4      v5      v6
+# Packages:    144       73    25    19    19      18      13
+# SystemUI:    86 MB     86    86    86    43      0       0
+# Gateway:     -         -     -     -     256*    205     186
+# Termux:      -         -     -     -     13      49      16
+# Swap:        87 MB     3     8     4     2       4       1
+# Android sys: ~450 MB   ~350  ~314  ~314  ~170    ~90     ~70
+# Free RAM:    ~0 MB     ~50   ~26   ~26   342     ~61**   450
+#
+# * v4 gateway = 234 PSS (gateway 234 + supervisor 22 = 256 total)
+# ** v5 free excludes ~500 MB reclaimable cache
+
+## CRITICAL RULES:
+# - NEVER force-stop com.termux.boot (sets stopped flag, breaks BOOT_COMPLETED)
+# - NEVER pm install -r /system/priv-app/*.apk (loses privileged perms)
+# - SystemUI cannot be pm disabled (SecurityException), use pm uninstall -k --user 0
+# - Native daemons (rild, camera, drm, audio, media ~48 MB) need root to kill
+# - start-openclaw may vanish from ~/  after Termux force-stop — redeploy if needed
+# - Always strip CRLF when deploying files from Windows: tr -d "\r"

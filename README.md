@@ -52,15 +52,15 @@ The native launcher replaces the home screen with a CRT-style dashboard. Red cra
 │             .=') [_] (`=.                │
 │            ' .='     `=. '               │
 │                                          │
-│  ● Gateway    200 OK    openclaw  205 MB │
-│  ● WiFi       Online    launcher   53 MB │
-│  ● Telegram   Live      termux     49 MB │
-│  ● Kimi K2.5  Connected openclaw   34 MB │
+│  ● Gateway    200 OK    gateway  186 MB │
+│  ● WiFi       Online    system    70 MB │
+│  ● Telegram   Live      launcher  33 MB │
+│  ● Kimi K2.5  Connected termux    16 MB │
 │                                          │
-│  RAM  382/898 MB (43%)                   │
-│  ████████░░░░░░░░░░░░                    │
+│  RAM  393/898 MB (44%)                   │
+│  █████████░░░░░░░░░░░                    │
 │                                          │
-│  Swap 4/256 MB  •  up: 3d 12h           │
+│  Swap 1/256 MB  •  auto-boot ✓          │
 │                                          │
 │       V8 160MB • PROOT • NODE 22 • KIMI  │
 │  ┌──────┬──────┬──────┬──────┐           │
@@ -93,10 +93,10 @@ Bot:     "I'm running on a Moto E2 from 2015 with 1GB of RAM.
 - **Voice messages** — send a voice note, get a text reply (via OpenAI Whisper)
 - **Fully autonomous** — watchdog + health checks auto-restart on crash or freeze, survives reboots
 - **`pocketclaw` CLI** — `start`, `stop`, `restart`, `status`, `logs`, `monitor` from one command
-- **RAM-optimized** — 205 MB RSS with V8 heap 160 MB, periodic GC, ESM stubs — on hardware that has 1 GB total
+- **RAM-optimized** — 186 MB PSS with V8 heap 160 MB, periodic GC, ESM stubs — on hardware that has 1 GB total
 - **42 documented hacks** — every impossible problem we hit, and how we solved it
 - **Native launcher** — CRT-style dashboard with animated crab, live status, RAM bar, process list, and built-in nav buttons (Settings, WiFi, Home, Back)
-- **Aggressive debloat** — 144 → 18 packages, SystemUI killed, Android system under 90 MB
+- **Aggressive debloat** — 144 → 13 packages, SystemUI killed, Android system under 70 MB
 
 ## The Hardware
 
@@ -124,25 +124,25 @@ If it runs on a Moto E2 from 2015, **it runs on anything you own.**
        └──────────┬───────────────┘
                   │
         ┌─────────▼──────────┐
-        │  OpenClaw Gateway  │  205 MB
-        │  (port 9000)       │
+        │  OpenClaw Gateway  │  186 MB PSS
+        │  (port 9000)       │  (single process)
         ├────────────────────┤
         │  proot Ubuntu      │
         │  Node.js 22        │
         ├────────────────────┤
-        │  Termux            │  49 MB
+        │  Termux            │  16 MB PSS
         ├────────────────────┤
-        │  Android 6         │  ~90 MB
-        │  (126 packages     │
+        │  Android 6         │  ~70 MB PSS
+        │  (131 packages     │
         │   debloated)       │
         ├────────────────────┤
-        │  PocketClaw APK    │  53 MB
+        │  PocketClaw APK    │  33 MB PSS
         │  (native launcher) │
         └────────────────────┘
 
-        Total: ~530 MB / 898 MB
-        Free:  ~370 MB
-        Swap:  ~4 MB
+        Total: ~393 MB PSS / 898 MB
+        Free:  ~450 MB
+        Swap:  ~1 MB
 ```
 
 All connections are **outbound**. The phone calls Telegram and your AI provider — they never call back. This means: any WiFi works, any hotspot works, no port forwarding, no dynamic DNS. Plug it in and forget about it.
@@ -157,32 +157,34 @@ Running a modern AI gateway on 1 GB RAM requires aggressive optimization. Here's
 
 Every version squeezed more out of the same hardware:
 
-| | **v0** Initial | **v1** Hacks | **v2** Debloat | **v3** Telephony | **v4** SystemUI opt | **v5** SystemUI dead |
-|---|---|---|---|---|---|---|
-| **Packages** | 144 | 144 | 25 | 19 | 19 | **18** |
-| **SystemUI** | 86 MB | 86 MB | 86 MB | 86 MB | 43 MB | **0 MB** |
-| **Gateway RSS** | ~231 MB | ~231 MB | ~231 MB | ~231 MB | ~231 MB | **205 MB** |
-| **V8 heap** | 192 MB | 192 MB | 192 MB | 192 MB | 192 MB | **160 MB** |
-| **Android sys** | ~450 MB | ~350 MB | ~314 MB | ~314 MB | ~170 MB | **~90 MB** |
-| **Swap** | 87 MB | 3 MB | 8 MB | 4 MB | 2 MB | **4 MB** |
-| **Periodic GC** | - | 60s cycle | 60s cycle | 60s cycle | 60s cycle | 60s cycle |
-| **ESM stubs** | - | 9 packages | 9 packages | 9 packages | 9 packages | 9 packages |
-| **Launcher** | stock | KISS | KISS | PocketClaw v2.2 | PocketClaw v2.3 | **v2.3 + nav bar** |
+| | **v0** Initial | **v1** Hacks | **v2** Debloat | **v3** Telephony | **v4** SystemUI opt | **v5** SystemUI dead | **v6** Single process |
+|---|---|---|---|---|---|---|---|
+| **Packages** | 144 | 144 | 25 | 19 | 19 | 18 | **13** |
+| **SystemUI** | 86 MB | 86 MB | 86 MB | 86 MB | 43 MB | 0 MB | **0 MB** |
+| **Gateway PSS** | ~231 MB | ~231 MB | ~231 MB | ~231 MB | ~234 MB | ~185 MB | **186 MB** |
+| **V8 heap** | 192 MB | 192 MB | 192 MB | 192 MB | 192 MB | 160 MB | **160 MB** |
+| **Android sys** | ~450 MB | ~350 MB | ~314 MB | ~314 MB | ~170 MB | ~90 MB | **~70 MB** |
+| **Swap** | 87 MB | 3 MB | 8 MB | 4 MB | 2 MB | 4 MB | **1 MB** |
+| **Periodic GC** | - | 60s cycle | 60s cycle | 60s cycle | 60s cycle | 60s cycle | 60s cycle |
+| **ESM stubs** | - | 9 packages | 9 packages | 9 packages | 9 packages | 9 packages | 9 packages |
+| **Launcher** | stock | KISS | KISS | PocketClaw v2.2 | PocketClaw v2.3 | v2.3 + nav bar | **v2.3 + auto-boot** |
+| **Boot** | manual | manual | manual | manual | manual | manual | **full auto** |
 
-**Total gains v0 → v5:** Android 450→90 MB (-80%), Gateway 231→205 MB (-11%), 126 packages removed, SystemUI eliminated, native launcher with dashboard.
+**Total gains v0 → v6:** Android 450→70 MB (-84%), Gateway 231→186 MB (-19%), 131 packages removed, SystemUI eliminated, supervisor eliminated, native launcher with auto-boot dashboard.
 
-### Memory budget (current — v5)
+### Memory budget (current — v6)
 
-| Component | RSS | PSS | Notes |
-|---|---|---|---|
-| Android system | ~90 MB | ~70 MB | 18 packages, SystemUI dead, dormants killed every 5 min |
-| OpenClaw gateway | 205 MB | ~185 MB | Telegram + dashboard, V8 heap 160 MB |
-| OpenClaw wrapper | 34 MB | ~22 MB | Node.js parent process |
-| PocketClaw Launcher | 53 MB | ~28 MB | 13 MB is GPU framebuffer (unavoidable) |
-| Termux | 49 MB | ~13 MB | Hosts all processes (proot, sshd, cron) |
-| Termux:Boot | 40 MB | ~6 MB | **Required** for auto-restart on reboot |
-| Native daemons | ~45 MB | ~30 MB | surfaceflinger, mediaserver, rild — need root to kill |
-| **Total** | **~530 MB** | | On 898 MB total — **~370 MB free** |
+| Component | PSS | Notes |
+|---|---|---|
+| OpenClaw gateway | 186 MB | Single process (no supervisor), V8 heap 160 MB |
+| Android system (system_server) | 70 MB | 13 packages, SystemUI dead, dormants killed every 5 min |
+| PocketClaw Launcher | 33 MB | Dashboard = HOME screen, auto-displayed on boot |
+| zygote | 24 MB | Shared fork parent (unavoidable) |
+| Termux | 16 MB | Hosts proot, sshd, cron |
+| Termux:Boot | 9 MB | **Required** for auto-restart on reboot — DO NOT force-stop |
+| surfaceflinger | 11 MB | Display compositor |
+| Native daemons | ~44 MB | mediaserver, rild, camera, drm, audio — need root to kill |
+| **Total PSS** | **~393 MB** | On 898 MB total — **~450 MB free**, 1 MB swap |
 
 ### What we tuned
 
@@ -391,7 +393,7 @@ Run the debloat script to free ~360 MB of RAM:
 adb reboot
 ```
 
-This removes 126 packages (Google, Motorola bloat, telephony, SystemUI) and applies server-mode tuning. See `debloat-snapshot-v5.txt` for the full state.
+This removes 131 packages (Google, Motorola bloat, telephony, SystemUI, media providers) and applies server-mode tuning. See `debloat-snapshot-v6.txt` for the full state.
 
 > **WARNING:** Never `am force-stop com.termux.boot` — it prevents auto-start on reboot.
 
@@ -641,7 +643,7 @@ Every single problem we hit — and the hack that fixed it. From proot crashes t
 | Node.js | 22.12.0 |
 | OpenClaw | 2026.2.9 |
 | AI Model | Kimi K2.5 (works with [any provider](#-pick-your-ai)) |
-| Debloat | v5 — 18 packages, SystemUI dead, ~90 MB Android |
+| Debloat | v6 — 13 packages, SystemUI dead, ~70 MB Android, full auto-boot |
 
 ---
 
@@ -663,7 +665,7 @@ MIT — do whatever you want with it.
 
 **Built with stubbornness on a mass of impossible constraints.**
 
-*A phone from 2015. 1GB of RAM. 126 packages debloated. SystemUI killed.*<br>
+*A phone from 2015. 1GB of RAM. 131 packages debloated. SystemUI killed. Auto-boot dashboard.*<br>
 *If it can run AI, anything can.*
 
 **[Star this repo](https://github.com/MonteiroRobin/pocketclaw)** if you think old phones deserve a second life.
