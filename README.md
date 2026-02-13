@@ -1,7 +1,7 @@
 <div align="center">
 
 ```
- ██████╗  ██████╗  ██████╗██╗  ██╗███████╗████████╗ ██████╗██╗      █████╗ ██╗    ██╗
+ ██╗██╗██╗ ██╗██╗██╗██╗██╗██╗██╗██╗██╗██╗
  ██╔══██╗██╔═══██╗██╔════╝██║ ██╔╝██╔════╝╚══██╔══╝██╔════╝██║     ██╔══██╗██║    ██║
  ██████╔╝██║   ██║██║     █████╔╝ █████╗     ██║   ██║     ██║     ███████║██║ █╗ ██║
  ██╔═══╝ ██║   ██║██║     ██╔═██╗ ██╔══╝     ██║   ██║     ██║     ██╔══██║██║███╗██║
@@ -29,6 +29,54 @@
 
 ---
 
+## The Dashboard
+
+```
+     P O C K E T C L A W
+      MOTO E2 • 1GB • ANDROID 6
+
+              / ¯<`         `> ¯\
+             (   / @       @ \   )
+              \(__ _\_/_ __)/
+            (\ `-/   .  .   \-` /)
+            "===\  / ... \  /==="
+              .==')(.:::::.)(` ==.
+            '  .='  ':::::' `=.  '
+            / /  .::::::::::.  \ \
+           | | (::::::::::::) | |
+            \ \  '::::::::' / /
+             \ \  | || |  / /
+            '-.\|__|__|/.-'
+                ^^    ^^
+
+     ● Gateway    200 OK
+     ● WiFi       Online
+     ● Telegram   Live
+     ● Kimi K2.5  Connected
+
+     RAM  382/898 MB (43%)
+     ████████░░░░░░░░░░░░
+
+     TOP PROCESSES
+     openclaw-gatewa  205 MB
+     launcher          53 MB
+     termux            49 MB
+     openclaw          34 MB
+
+     Swap 4/256 MB  •  up: 3d 12h
+
+          V8 160MB • PROOT • NODE 22 • KIMI
+```
+
+The native launcher replaces the home screen with a CRT-style dashboard. Red crab, green text, live stats — all running on a phone from 2015.
+
+<div align="center">
+<img src="crab-final.png" alt="PocketClaw Dashboard" width="270">
+<img src="crab-screenshot3.png" alt="PocketClaw Crab v2" width="270">
+</div>
+
+---
+
 ## The Pitch
 
 You have an old phone in a drawer. It's worthless. Nobody wants it.
@@ -51,10 +99,10 @@ Bot:     "I'm running on a Moto E2 from 2015 with 1GB of RAM.
 - **Voice messages** — send a voice note, get a text reply (via OpenAI Whisper)
 - **Fully autonomous** — watchdog + health checks auto-restart on crash or freeze, survives reboots
 - **`pocketclaw` CLI** — `start`, `stop`, `restart`, `status`, `logs`, `monitor` from one command
-- **RAM-optimized** — 178 MB RSS with V8 heap 128 MB, periodic GC, ESM stubs, and a live dashboard — on hardware that has 1 GB total
+- **RAM-optimized** — 205 MB RSS with V8 heap 160 MB, periodic GC, ESM stubs — on hardware that has 1 GB total
 - **42 documented hacks** — every impossible problem we hit, and how we solved it
-- **Live dashboard** — CRT-style status page on the phone screen (Gateway, WiFi, RAM, Telegram, errors — auto-refresh every 3s)
-- **Custom launcher APK** — Native dashboard replaces the home screen (escape hatches: triple-tap Settings, double-back launcher switch, emergency button after 5 min offline, ADB kill switch)
+- **Native launcher** — CRT-style dashboard with animated crab, live status, RAM bar, process list, and built-in nav buttons (Settings, WiFi, Home, Back)
+- **Aggressive debloat** — 144 → 18 packages, SystemUI killed, Android system under 90 MB
 
 ## The Hardware
 
@@ -82,17 +130,25 @@ If it runs on a Moto E2 from 2015, **it runs on anything you own.**
        └──────────┬───────────────┘
                   │
         ┌─────────▼──────────┐
-        │  OpenClaw Gateway  │
+        │  OpenClaw Gateway  │  205 MB
         │  (port 9000)       │
         ├────────────────────┤
         │  proot Ubuntu      │
         │  Node.js 22        │
         ├────────────────────┤
-        │  Termux            │
+        │  Termux            │  49 MB
         ├────────────────────┤
-        │  Android Phone     │
-        │  (in a drawer)     │
+        │  Android 6         │  ~90 MB
+        │  (126 packages     │
+        │   debloated)       │
+        ├────────────────────┤
+        │  PocketClaw APK    │  53 MB
+        │  (native launcher) │
         └────────────────────┘
+
+        Total: ~530 MB / 898 MB
+        Free:  ~370 MB
+        Swap:  ~4 MB
 ```
 
 All connections are **outbound**. The phone calls Telegram and your AI provider — they never call back. This means: any WiFi works, any hotspot works, no port forwarding, no dynamic DNS. Plug it in and forget about it.
@@ -107,63 +163,60 @@ Running a modern AI gateway on 1 GB RAM requires aggressive optimization. Here's
 
 Every version squeezed more out of the same hardware:
 
-| | **v0** Initial | **v1** Hacks | **v2** Optim | **v3** Stubs+Heap | **v4** Dashboard+Debloat |
-|---|---|---|---|---|---|
-| **Gateway RSS** | ~224 MB | ~224 MB | 233 MB | ~178 MB | **~178 MB** |
-| **V8 heap** | 384 MB | 384 MB | 384 MB | 192 MB | **128 MB** |
-| **Periodic GC** | - | - | 60s, ~11 MB/cycle | 60s, ~11 MB/cycle | 60s, ~11 MB/cycle |
-| **ESM stubs** | - | - | - | 9 packages stubbed | 9 packages stubbed |
-| **Packages disabled** | - | - | - | 31 (pm uninstall) | **51+ (pm disable via Dirty COW)** |
-| **node_modules** | 413 MB | 413 MB | 413 MB | 151 MB | 151 MB |
-| **Disk free** | ~100 MB | ~120 MB | 148 MB | 471 MB | 471 MB |
-| **Crash recovery** | manual | watchdog loop | + healthcheck cron | + healthcheck cron | + healthcheck cron |
-| **Dashboard** | - | - | - | - | **CRT-style on phone screen** |
-| **Launcher** | stock | stock | KISS | KISS | **PocketClaw APK (8.5 KB)** |
-| **Monitoring** | - | - | CSV every 5 min | CSV every 5 min | CSV + live /api/status |
+| | **v0** Initial | **v1** Hacks | **v2** Debloat | **v3** Telephony | **v4** SystemUI opt | **v5** SystemUI dead |
+|---|---|---|---|---|---|---|
+| **Packages** | 144 | 144 | 25 | 19 | 19 | **18** |
+| **SystemUI** | 86 MB | 86 MB | 86 MB | 86 MB | 43 MB | **0 MB** |
+| **Gateway RSS** | ~231 MB | ~231 MB | ~231 MB | ~231 MB | ~231 MB | **205 MB** |
+| **V8 heap** | 192 MB | 192 MB | 192 MB | 192 MB | 192 MB | **160 MB** |
+| **Android sys** | ~450 MB | ~350 MB | ~314 MB | ~314 MB | ~170 MB | **~90 MB** |
+| **Swap** | 87 MB | 3 MB | 8 MB | 4 MB | 2 MB | **4 MB** |
+| **Periodic GC** | - | 60s cycle | 60s cycle | 60s cycle | 60s cycle | 60s cycle |
+| **ESM stubs** | - | 9 packages | 9 packages | 9 packages | 9 packages | 9 packages |
+| **Launcher** | stock | KISS | KISS | PocketClaw v2.2 | PocketClaw v2.3 | **v2.3 + nav bar** |
 
-**Total gains v0 → v4:** -46 MB RSS (-21%), +371 MB disk, -262 MB node_modules (-63%), heap 384→128 (-67%), 51+ packages disabled, live dashboard, custom launcher APK.
+**Total gains v0 → v5:** Android 450→90 MB (-80%), Gateway 231→205 MB (-11%), 126 packages removed, SystemUI eliminated, native launcher with dashboard.
 
-### Memory budget
+### Memory budget (current — v5)
 
-| Component | RAM | Notes |
-|---|---|---|
-| Android (51+ disabled) | ~280 MB | Dirty COW + pm disable, GMS frozen on boot via ADB |
-| OpenClaw gateway | ~178 MB | Telegram + dashboard, ESM stubs, heap 128 MB |
-| **Total needed** | **~458 MB** | On 920 MB total — **462 MB margin** |
-
-**With root (freeze GMS):**
-
-| Component | RAM | Notes |
-|---|---|---|
-| Android (no GMS) | ~60 MB | After freezing Google Play Services |
-| Termux + proot | ~60 MB | Shell + Linux userspace emulation |
-| OpenClaw gateway | ~178 MB | Same config |
-| **Total needed** | **~298 MB** | On 920 MB total — **622 MB margin** |
+| Component | RSS | PSS | Notes |
+|---|---|---|---|
+| Android system | ~90 MB | ~70 MB | 18 packages, SystemUI dead, dormants killed every 5 min |
+| OpenClaw gateway | 205 MB | ~185 MB | Telegram + dashboard, V8 heap 160 MB |
+| OpenClaw wrapper | 34 MB | ~22 MB | Node.js parent process |
+| PocketClaw Launcher | 53 MB | ~28 MB | 13 MB is GPU framebuffer (unavoidable) |
+| Termux | 49 MB | ~13 MB | Hosts all processes (proot, sshd, cron) |
+| Termux:Boot | 40 MB | ~6 MB | **Required** for auto-restart on reboot |
+| Native daemons | ~45 MB | ~30 MB | surfaceflinger, mediaserver, rild — need root to kill |
+| **Total** | **~530 MB** | | On 898 MB total — **~370 MB free** |
 
 ### What we tuned
 
 | Optimization | Impact |
 |---|---|
-| `--max-old-space-size=128` | Caps V8 heap. Binary search found OOM at 96, stable at 128. RSS ~178 MB regardless. |
+| `--max-old-space-size=160` | Caps V8 heap. OOM at 128 (working set ~124 MB), stable at 160. |
 | `--expose-gc` + periodic GC | Explicit `global.gc()` every 60s frees ~10 MB per cycle |
-| ESM stub packages | Replace 9 unused SDKs (Slack, Discord, LINE, WhatsApp, Playwright, AWS Bedrock, Google Gemini) with empty ESM exports. Saves ~40 MB RSS and 262 MB disk. |
-| Kill GMS sub-processes at startup | Frees ~50-100 MB temporarily (they respawn slowly) |
-| Compile cache | Node 22's bytecode cache, faster cold starts |
-| Concurrency limits | `maxConcurrency: 1`, `maxQueueSize: 2` — no parallel requests |
-| npm package cleanup | Delete 13 packages with 0 imports (types, build tools, unused SDKs) — saves 262 MB disk |
-| npm cache cleanup | Clear `~/.npm/` after installs — saves ~220 MB disk |
+| ESM stub packages | Replace 9 unused SDKs with empty ESM exports. Saves ~40 MB RSS and 262 MB disk. |
+| Debloat 126 packages | `pm uninstall -k --user 0` — no root required |
+| Kill SystemUI | `pm uninstall -k --user 0 com.android.systemui` — launcher has nav buttons |
+| Dormant killer loop | Boot script force-stops respawning services every 5 min |
+| Animations off | `window_animation_scale=0`, `transition_animation_scale=0`, `animator_duration_scale=0` |
+| Low power mode | `settings put global low_power 1` — reduces SystemUI overhead |
+| Screen brightness 0 | `screen_brightness=0`, `screen_off_timeout=15000` |
 
 ### What we tested and ruled out
 
 | Idea | Result |
 |---|---|
-| V8 startup snapshot (`--build-snapshot`) | Builds OK (5 MB blob) but ESM restore fails: `ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING` |
-| CJS module stubs (block `require()`) | OpenClaw is 100% ESM bundled by Rolldown — 0 CJS `require()` calls to intercept |
-| Delete unused npm packages | ESM resolves all imports at link-time, even if code paths are never reached. Deleting *imported* packages breaks boot — stubs are the fix. Packages with 0 imports (types, build tools, unused SDKs) can be safely deleted. |
-| Running without proot | Node v22 works via `ld-linux-armhf.so.3` trick, but no RAM savings (same V8 heap) |
-| `--optimize-for-size` | Not allowed in `NODE_OPTIONS` (Node 22 restriction) |
-| `--jitless` | Works but -6 to -40% CPU perf — not worth it on slow hardware |
-| `--lite-mode` | V8 compile-time only, not a runtime flag |
+| V8 heap 128 MB | OOM — working set is ~124 MB, not enough headroom for GC |
+| Kill SystemUI via `am force-stop` | Doesn't work — PERSISTENT flag, needs `pm uninstall` |
+| `pm disable-user` SystemUI | SecurityException — permission denied |
+| `pm install -r /system/priv-app/X.apk` | Installs to `/data/app/`, **loses privileged permissions** — never do this |
+| `pm clear com.android.systemui` | Corrupts keyguard → black screen lockout |
+| `immersive.full=*` | Hides nav bar in ALL apps — user gets stuck in Settings |
+| Force-stop `com.termux.boot` | Sets "stopped" flag → no `BOOT_COMPLETED` → bot won't auto-start |
+| Kill native daemons (rild, camera, drm) | Need root — `kill` fails with "Operation not permitted" |
+| V8 startup snapshot (`--build-snapshot`) | ESM restore fails: `ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING` |
 | Bun runtime | No ARM32 build available |
 
 ### Monitoring
@@ -174,10 +227,10 @@ The `monitor` script logs RAM, CPU, swap, disk, battery every 5 minutes to a CSV
 $ pocketclaw status
 === PocketClaw Status ===
 Gateway:  RUNNING (PID 12345)
-Uptime:   up 3 days, 2:15
+Uptime:   up 3 days, 12:00
 RAM:      370MB available / 898MB total
-Gateway:  178MB RSS
-Swap:     26MB used (swappiness=100)
+Gateway:  205MB RSS (heap 160MB)
+Swap:     4MB used
 Disk:     471MB free
 Battery:  87%, 31.2°C
 Crons:    2 active
@@ -312,7 +365,7 @@ restart-gw
 
 Wait 30-60 seconds. Then open Telegram and message your bot.
 
-**If it replies, you're done.** 🎉
+**If it replies, you're done.**
 
 ### Step 10 — Auto-start on boot (optional)
 
@@ -328,13 +381,27 @@ adb install termux-boot.apk
 ```bash
 # In Termux: install boot script
 mkdir -p ~/.termux/boot
-cp /sdcard/Download/boot-openclaw.sh ~/.termux/boot/start-openclaw.sh
-chmod +x ~/.termux/boot/start-openclaw.sh
+cp /sdcard/Download/boot-openclaw.sh ~/.termux/boot/start-pocketclaw.sh
+chmod +x ~/.termux/boot/start-pocketclaw.sh
 ```
 
 Now unplug the phone. Put it in a drawer. It restarts everything on its own after a reboot.
 
-### Step 11 — Harden for 24/7 (recommended)
+### Step 11 — Debloat (recommended for 1GB devices)
+
+Run the debloat script to free ~360 MB of RAM:
+
+```bash
+# On your PC, via ADB
+./restore-debloat.sh
+adb reboot
+```
+
+This removes 126 packages (Google, Motorola bloat, telephony, SystemUI) and applies server-mode tuning. See `debloat-snapshot-v5.txt` for the full state.
+
+> **WARNING:** Never `am force-stop com.termux.boot` — it prevents auto-start on reboot.
+
+### Step 12 — Harden for 24/7 (recommended)
 
 The phone will sleep with the screen off. These settings keep WiFi and Termux alive in the background:
 
@@ -403,7 +470,7 @@ OpenClaw works with **30+ providers** out of the box. Just change the provider, 
 | `plugins.entries.telegram.enabled: true` | **Required.** Without this, Telegram won't load even if `channels.telegram` is configured. |
 | `reasoning: false` | Prevents extended thinking mode that can cause empty responses. |
 | `network.autoSelectFamily: true` | Enables dual-stack IPv4/IPv6 for better connectivity. |
-| `--max-old-space-size=192` | Caps V8 heap. OOM at 96, minimum 128, production safe at 192. RSS is ~178 MB regardless (incompressible native code). |
+| `--max-old-space-size=160` | Caps V8 heap. OOM at 128 (working set ~124 MB), stable at 160. |
 | `--expose-gc` | Enables `global.gc()`. Combined with hijack.js timer, frees ~10 MB every 60s. |
 | `maxConcurrency: 1` | One request at a time. More would OOM on 1 GB RAM. |
 
@@ -425,7 +492,6 @@ See [`config/openclaw.example.json`](config/openclaw.example.json) for the full 
 <summary><b>"fetch failed" errors</b></summary>
 
 Network issue. Check WiFi. If IPv4 routing is broken, reboot the phone.
-**Never kill `com.google.android.gms`** — it manages WiFi routing on Android.
 </details>
 
 <details>
@@ -452,25 +518,53 @@ rm -f $ROOTFS/tmp/openclaw/*.lock
 <details>
 <summary><b>Out of memory / phone freezes</b></summary>
 
-- Verify `--max-old-space-size=192` is in NODE_OPTIONS
-- Kill unnecessary apps: `am force-stop <package>`
-- **Never kill** `com.google.android.gms` (breaks WiFi)
+- Verify `--max-old-space-size=160` is in NODE_OPTIONS
+- Run `restore-debloat.sh` to remove bloat packages
+- Kill dormant services: `am force-stop com.android.settings` etc.
+- **Never kill** `com.termux` or `com.termux.boot`
 </details>
 
 <details>
-<summary><b>Gateway crashes with "ENETUNREACH" or "fetch failed"</b></summary>
+<summary><b>Gateway OOM at 128 MB heap</b></summary>
 
-The phone lost network briefly. The watchdog in `start-openclaw` auto-restarts the gateway after 10 seconds. If it keeps happening:
-- Check WiFi is stable
-- Verify `wifi_sleep_policy` is set to `2` (never sleep)
-- Make sure Doze is disabled: `adb shell dumpsys deviceidle disable`
+The working set is ~124 MB. 128 MB doesn't leave enough headroom for V8 GC. Use 160 MB minimum.
 </details>
 
 <details>
-<summary><b>Can't kill processes from ADB shell</b></summary>
+<summary><b>Stuck in Settings (no back button)</b></summary>
 
-ADB runs as UID `shell`, can't signal Termux processes. Kill from Termux or SSH instead.
+If SystemUI is uninstalled, there's no system nav bar outside the launcher. Use:
+```bash
+adb shell input keyevent KEYCODE_BACK
+adb shell input keyevent KEYCODE_HOME
+```
 </details>
+
+<details>
+<summary><b>Bot doesn't auto-start after reboot</b></summary>
+
+Check if `com.termux.boot` was force-stopped. `am force-stop` sets the "stopped" flag which blocks `BOOT_COMPLETED` broadcasts. Fix:
+```bash
+# Open Termux:Boot app manually once, or:
+adb shell monkey -p com.termux.boot -c android.intent.category.LAUNCHER 1
+```
+</details>
+
+---
+
+## 📸 Screenshots
+
+<div align="center">
+
+| Dashboard v2.3 | Crab Art v2 | Termux Install |
+|---|---|---|
+| <img src="crab-final.png" width="180"> | <img src="crab-screenshot3.png" width="180"> | <img src="screen3.png" width="180"> |
+
+| Lock Screen | Dashboard v2.2 | Termux Session |
+|---|---|---|
+| <img src="screen4.png" width="180"> | <img src="dashboard-screenshot.png" width="180"> | <img src="screen7.png" width="180"> |
+
+</div>
 
 ---
 
@@ -482,57 +576,64 @@ pocketclaw/
 ├── HACKS.md                       # The 30 hacks — the full war story
 ├── CONTRIBUTING.md                 # How to contribute
 ├── LICENSE                         # MIT
+├── restore-debloat.sh             # One-script debloat (126 packages + tuning)
+├── active-packages.txt            # Current 18 active packages
+├── debloat-snapshot-v5.txt        # Full system state snapshot
 ├── config/
 │   ├── openclaw.example.json      # Working config (copy & fill in keys)
 │   └── env.example                # API key template
-└── scripts/
-    ├── start-openclaw.sh          # Gateway launcher with watchdog loop
-    ├── restart-gw.sh              # Clean kill + restart
-    ├── run-proot.sh               # Run commands inside proot
-    ├── boot-openclaw.sh           # Termux:Boot auto-start + cron setup
-    ├── pocketclaw.sh              # CLI: start/stop/restart/status/logs/monitor
-    ├── healthcheck.sh             # Cron: restart gateway if unresponsive (every 2 min)
-    ├── logrotate.sh               # Cron: trim logs and CSV to 24h (every hour)
-    ├── monitor.sh                 # Background: log RAM/CPU/disk/battery to CSV
-    ├── create-stubs.sh            # Replace unused SDKs with ESM stubs (-40 MB RSS, -262 MB disk)
-    ├── boot-debloat.sh            # ADB-side: Dirty COW + pm disable 51+ packages
-    └── hijack.js                  # Runtime patch: fix os.networkInterfaces + periodic GC
+├── scripts/
+│   ├── start-openclaw.sh          # Gateway launcher with watchdog loop
+│   ├── restart-gw.sh              # Clean kill + restart
+│   ├── run-proot.sh               # Run commands inside proot
+│   ├── boot-openclaw.sh           # Termux:Boot auto-start + cron setup
+│   ├── pocketclaw.sh              # CLI: start/stop/restart/status/logs/monitor
+│   ├── healthcheck.sh             # Cron: restart gateway if unresponsive
+│   ├── logrotate.sh               # Cron: trim logs and CSV to 24h
+│   ├── monitor.sh                 # Background: log RAM/CPU/disk/battery to CSV
+│   ├── create-stubs.sh            # Replace unused SDKs with ESM stubs
+│   └── hijack.js                  # Runtime patch: fix os.networkInterfaces + GC
+├── tools/
+│   ├── start-pocketclaw.sh        # Boot script (WiFi wait, gateway, killer loops)
+│   ├── fix-stubs.sh               # Fix ESM stubs for bind-mount setup
+│   ├── fix-and-install.sh         # Full install automation
+│   ├── wifi-watchdog.sh           # WiFi connectivity watchdog
+│   ├── set-static-ip.sh           # Static IP configuration
+│   ├── crash-dismisser.sh         # Auto-dismiss crash dialogs
+│   ├── kernel-tune.c              # Kernel parameter tuner (sysctl)
+│   └── check-git.sh              # Git wrapper verification
 ├── apk/
-│   ├── AndroidManifest.xml           # Launcher APK manifest (HOME intent)
-│   └── src/.../LauncherActivity.java # WebView → localhost:9000/dashboard
+│   ├── AndroidManifest.xml        # Launcher APK manifest (HOME intent)
+│   └── src/.../LauncherActivity.java  # Native dashboard — no WebView
+└── *.png                          # Screenshots
 ```
 
 ### On the phone
 
 ```
 $PREFIX/bin/
-  ├── start-openclaw       # → scripts/start-openclaw.sh
-  ├── restart-gw           # → scripts/restart-gw.sh
-  ├── run-proot            # → scripts/run-proot.sh
-  ├── pocketclaw           # → scripts/pocketclaw.sh
-  ├── healthcheck          # → scripts/healthcheck.sh  (cron every 2 min)
-  └── logrotate-pc         # → scripts/logrotate.sh    (cron every hour)
-
-/data/local/tmp/
-  ├── dirtycow              # Dirty COW exploit binary
-  ├── run-as-payload        # Payload for run-as replacement
-  └── boot-debloat.sh       # → scripts/boot-debloat.sh
-
-$ROOTFS/root/
-  ├── hijack.js            # → scripts/hijack.js
-  └── .openclaw/
-      ├── openclaw.json    # → config/openclaw.example.json (with real keys)
-      └── env              # → config/env.example (with real keys)
+  ├── start-openclaw       # Gateway with proot + watchdog loop
+  ├── restart-gw           # Clean kill + restart
+  ├── run-proot            # Run commands inside proot
+  ├── pocketclaw           # CLI
+  ├── healthcheck          # Cron every 2 min
+  └── logrotate-pc         # Cron every hour
 
 ~/.termux/boot/
-  └── start-openclaw.sh   # → scripts/boot-openclaw.sh
+  └── start-pocketclaw.sh  # Auto-start: WiFi wait → gateway → killer loops
+
+$ROOTFS/root/
+  ├── hijack.js            # GC + network patch
+  └── .openclaw/
+      ├── openclaw.json    # Config with real keys
+      └── env              # API keys
 ```
 
 ---
 
 ## 🤝 The 30 Hacks
 
-Every single problem we hit — and the hack that fixed it. From proot crashes to User-Agent spoofing to discovering that killing Google Play Services permanently breaks WiFi. From a boot loop fixed by a 2232-byte kernel exploit to a CRT dashboard running in a WebView.
+Every single problem we hit — and the hack that fixed it. From proot crashes to User-Agent spoofing to discovering that killing SystemUI causes a crash loop that can only be fixed by `pm uninstall`. From OOM at 128 MB heap to learning that `pm install -r` on a system APK loses all privileged permissions.
 
 **[Read the full story →](HACKS.md)**
 
@@ -544,12 +645,13 @@ Every single problem we hit — and the hack that fixed it. From proot crashes t
 |---|---|
 | Phone | Moto E2 4G LTE (XT1524), 2015 |
 | Android | 6.0 Marshmallow |
-| RAM | 1 GB |
+| RAM | 1 GB (898 MB usable) |
 | Termux | v0.119.0-beta.3 (apt-android-5) |
 | proot-distro | Ubuntu 25.10 (armhf) |
 | Node.js | 22.12.0 |
 | OpenClaw | 2026.2.9 |
 | AI Model | Kimi K2.5 (works with [any provider](#-pick-your-ai)) |
+| Debloat | v5 — 18 packages, SystemUI dead, ~90 MB Android |
 
 ---
 
@@ -571,7 +673,7 @@ MIT — do whatever you want with it.
 
 **Built with stubbornness on a mass of impossible constraints.**
 
-*A phone from 2015. 1GB of RAM. 30 hacks.*<br>
+*A phone from 2015. 1GB of RAM. 126 packages debloated. SystemUI killed.*<br>
 *If it can run AI, anything can.*
 
 **[Star this repo](https://github.com/MonteiroRobin/pocketclaw)** if you think old phones deserve a second life.
