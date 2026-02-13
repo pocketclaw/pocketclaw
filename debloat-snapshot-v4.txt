@@ -1,0 +1,78 @@
+# PocketClaw Debloat Snapshot v4 — 2026-02-13
+# 19 active packages (same as v3)
+# Changes from v3: SystemUI optimized (tiles, icon_blacklist, low_power)
+#                   immersive mode REMOVED (policy_control null) — system nav bar needed
+#                   Launcher v2.3 with built-in nav bar deployed
+
+## Active packages (19):
+package:android
+package:com.android.defcontainer
+package:com.android.externalstorage
+package:com.android.inputdevices
+package:com.android.keychain
+package:com.android.providers.downloads
+package:com.android.providers.downloads.ui
+package:com.android.providers.media
+package:com.android.providers.settings
+package:com.android.settings
+package:com.android.shell
+package:com.android.systemui
+package:com.google.android.packageinstaller
+package:com.google.android.webview
+package:com.motorola.android.providers.settings
+package:com.motorola.android.sepolicyupdate
+package:com.pocketclaw.launcher
+package:com.termux
+package:com.termux.boot
+
+## RAM (bot running, gateway up, SystemUI optimized):
+#   Total RAM:  920 MB
+#   Used RAM:   529 MB
+#   Free RAM:   342 MB (29 MB cached pss + 243 MB cached kernel + 70 MB free)
+#   Swap:       2.3 MB / 256 MB
+#
+# Key processes PSS:
+#   openclaw-gateway     234 MB
+#   system_server         54 MB
+#   SystemUI              43 MB  (was 86 MB — halved by optimizations)
+#   pocketclaw.launcher   26 MB
+#   openclaw              22 MB
+#   zygote                19 MB
+#   termux                13 MB
+#   android.process.media 12 MB
+#   surfaceflinger        11 MB
+#   mediaserver           10 MB
+#   termux.boot            6 MB
+#   externalstorage        6 MB
+#   keychain               6 MB
+#   native daemons       ~20 MB total
+#
+# Android system total (no bot): ~170 MB  (was ~314 MB at v3 snapshot)
+# Bot total: ~256 MB (gateway + openclaw)
+
+## System settings applied:
+# policy_control=null             (system nav bar visible — needed for Settings navigation)
+# sysui_qs_tiles=''              (empty quick settings tiles)
+# icon_blacklist=bluetooth,hotspot,alarm,zen,rotate,cell,airplane,cast,location,nfc
+# low_power=1
+# window_animation_scale=0
+# transition_animation_scale=0
+# animator_duration_scale=0
+# screen_brightness=0
+# screen_off_timeout=15000
+
+## Comparison
+#              v0(orig)  v1(R1+R2)  v2(R3)  v3(R4+tuning)  v4(sysui opt)
+# Packages:    144       73         25      19              19
+# Swap used:   87 MB     3 MB       8 MB    4 MB           2 MB
+# SystemUI:    ~86 MB    ~86 MB     ~86 MB  ~86 MB         43 MB
+# Android sys: ~450 MB   ~350 MB    ~314 MB ~314 MB        ~170 MB
+# Free RAM:    ~0 MB     ~50 MB     ~26 MB  ~26 MB         342 MB
+
+## Learnings (DO NOT repeat):
+# - pm install -r /system/priv-app/X.apk → installs to /data/app/ as UPDATED_SYSTEM_APP, LOSES privileged permissions
+# - pm uninstall com.android.systemui (no -k --user 0) → removes update, reverts to system copy
+# - pm clear com.android.systemui → corrupts keyguard → black screen lockout
+# - SystemUI CANNOT be removed — required for system-wide navigation
+# - immersive.full=* hides nav bar in ALL apps → user gets stuck in Settings
+# - force-stop SystemUI → LMK kills Termux and bot

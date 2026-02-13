@@ -16,6 +16,7 @@ import android.provider.Settings;
 import android.view.Gravity;
 import android.view.View;
 import android.view.WindowManager;
+import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -40,7 +41,7 @@ public class LauncherActivity extends Activity {
     private int titleTapIndex = 0;
     private int offlineCount = 0;
     private boolean lastWasOnline = false;
-    private static final int OFFLINE_THRESHOLD = 60; // ~5 min at 5s intervals
+    private static final int OFFLINE_THRESHOLD = 60;
     private BroadcastReceiver exitReceiver;
 
     private static final String[] DEFAULT_CRAB = {
@@ -64,7 +65,6 @@ public class LauncherActivity extends Activity {
 
     private String[] crab = DEFAULT_CRAB;
 
-    // Block Unicode title — spaced for readability
     private static final String BLOCK_TITLE =
         "\u2588\u2580\u2588 \u2588\u2580\u2588 \u2588\u2580\u2580 \u2588\u2584\u2580 \u2588\u2580\u2580 \u2580\u2588\u2580 \u2588\u2580\u2580 \u2588   \u2584\u2580\u2588 \u2588 \u2588 \u2588\n" +
         "\u2588\u2580\u2580 \u2588\u2584\u2588 \u2588\u2584\u2584 \u2588 \u2588 \u2588\u2588\u2584  \u2588  \u2588\u2584\u2584 \u2588\u2584\u2584 \u2588\u2580\u2588 \u2580\u2584\u2580\u2584\u2580";
@@ -96,10 +96,16 @@ public class LauncherActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        // Fullscreen — we ARE the system UI now
+        getWindow().setFlags(
+            WindowManager.LayoutParams.FLAG_FULLSCREEN,
+            WindowManager.LayoutParams.FLAG_FULLSCREEN);
         getWindow().setStatusBarColor(0xFF000A00);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD);
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED);
 
-        // Kill switch: adb shell am broadcast -a com.pocketclaw.EXIT
         exitReceiver = new BroadcastReceiver() {
             @Override
             public void onReceive(Context context, Intent intent) {
@@ -109,21 +115,25 @@ public class LauncherActivity extends Activity {
         registerReceiver(exitReceiver, new IntentFilter("com.pocketclaw.EXIT"));
 
         float d = getResources().getDisplayMetrics().density;
+
+        // Main container: content + nav bar
+        FrameLayout mainFrame = new FrameLayout(this);
+        mainFrame.setBackgroundColor(0xFF000A00);
+
+        // Scrollable content
         ScrollView scroll = new ScrollView(this);
         scroll.setBackgroundColor(0xFF000A00);
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding((int)(12*d), (int)(8*d), (int)(12*d), (int)(16*d));
+        root.setPadding((int)(12*d), (int)(8*d), (int)(12*d), (int)(60*d)); // bottom padding for nav bar
 
-        // Crab at the top, centered
         loadCrab();
         crabView = mono(crab[0], 11, 0xFFEE3333);
         crabView.setGravity(Gravity.CENTER_HORIZONTAL);
         crabView.setPadding(0, (int)(4*d), 0, (int)(4*d));
         root.addView(crabView);
 
-        // Block title (POCKETCLAW) — bigger, spaced
         TextView title = mono(BLOCK_TITLE, 11, 0xFFFFFFFF);
         title.setGravity(Gravity.CENTER);
         title.setOnClickListener(v -> {
@@ -140,31 +150,26 @@ public class LauncherActivity extends Activity {
         });
         root.addView(title);
 
-        // Subtitle
         TextView sub = mono("MOTO E2 \u2022 1GB \u2022 ANDROID 6", 9, 0xFF1A3A1A);
         sub.setGravity(Gravity.CENTER);
         sub.setPadding(0, (int)(2*d), 0, (int)(20*d));
         root.addView(sub);
 
-        // RAM bar (centered, separate from status)
         ramView = mono("", 12, 0xFF00AA00);
         ramView.setGravity(Gravity.CENTER);
         ramView.setPadding(0, 0, 0, (int)(10*d));
         root.addView(ramView);
 
-        // Status (services + processes + info)
         statusView = mono("\u25CB Gateway    Connecting...", 12, 0xFF00AA00);
         statusView.setPadding(0, 0, 0, (int)(8*d));
         statusView.setLineSpacing(0, 1.2f);
         root.addView(statusView);
 
-        // Footer
         TextView ft = mono("V8 192MB \u2022 PROOT \u2022 NODE 22 \u2022 KIMI", 8, 0xFF082A08);
         ft.setGravity(Gravity.CENTER);
         ft.setPadding(0, (int)(8*d), 0, 0);
         root.addView(ft);
 
-        // Emergency button — hidden until gateway is down 5+ minutes
         emergencyBtn = new TextView(this);
         emergencyBtn.setText("\u26A0  OPEN SETTINGS");
         emergencyBtn.setTextSize(16);
@@ -179,8 +184,74 @@ public class LauncherActivity extends Activity {
 
         rootLayout = root;
         scroll.addView(root);
-        setContentView(scroll);
+
+        // Nav bar at bottom
+        LinearLayout navBar = new LinearLayout(this);
+        navBar.setOrientation(LinearLayout.HORIZONTAL);
+        navBar.setBackgroundColor(0xFF0A0A0A);
+        navBar.setGravity(Gravity.CENTER);
+        int navH = (int)(48*d);
+
+        // Settings button
+        TextView btnSettings = navBtn("\u2699", d);
+        btnSettings.setOnClickListener(v -> {
+            startActivity(new Intent(Settings.ACTION_SETTINGS));
+        });
+
+        // WiFi button
+        TextView btnWifi = navBtn("\u25D4", d);
+        btnWifi.setOnClickListener(v -> {
+            startActivity(new Intent(Settings.ACTION_WIFI_SETTINGS));
+        });
+
+        // Home / Dashboard button
+        TextView btnHome = navBtn("\u25A0", d);
+        btnHome.setTextColor(0xFFEE3333);
+        btnHome.setOnClickListener(v -> {
+            // Scroll to top = back to dashboard
+            scroll.smoothScrollTo(0, 0);
+        });
+
+        // Back button
+        TextView btnBack = navBtn("\u25C0", d);
+        btnBack.setOnClickListener(v -> {
+            // Simulate back key
+            try {
+                Runtime.getRuntime().exec(new String[]{
+                    "input", "keyevent", "4"
+                });
+            } catch (Exception e) {}
+        });
+
+        LinearLayout.LayoutParams btnParams = new LinearLayout.LayoutParams(0, navH, 1);
+        navBar.addView(btnSettings, btnParams);
+        navBar.addView(btnWifi, new LinearLayout.LayoutParams(0, navH, 1));
+        navBar.addView(btnHome, new LinearLayout.LayoutParams(0, navH, 1));
+        navBar.addView(btnBack, new LinearLayout.LayoutParams(0, navH, 1));
+
+        FrameLayout.LayoutParams scrollParams = new FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT);
+        mainFrame.addView(scroll, scrollParams);
+
+        FrameLayout.LayoutParams navParams = new FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT, navH);
+        navParams.gravity = Gravity.BOTTOM;
+        mainFrame.addView(navBar, navParams);
+
+        setContentView(mainFrame);
         fetchLoop();
+    }
+
+    private TextView navBtn(String icon, float d) {
+        TextView btn = new TextView(this);
+        btn.setText(icon);
+        btn.setTextSize(22);
+        btn.setTextColor(0xFF888888);
+        btn.setTypeface(Typeface.DEFAULT_BOLD);
+        btn.setGravity(Gravity.CENTER);
+        btn.setClickable(true);
+        btn.setFocusable(true);
+        return btn;
     }
 
     private TextView mono(String s, int size, int color) {
@@ -250,8 +321,6 @@ public class LauncherActivity extends Activity {
 
     private String formatStatus(String j) {
         StringBuilder s = new StringBuilder();
-
-        // Parse processes
         String[][] procs = new String[8][2];
         int procCount = 0;
         int pi = 0;
@@ -271,7 +340,6 @@ public class LauncherActivity extends Activity {
             pi = mE;
         }
 
-        // Two columns: services (left) + processes (right)
         String[] sn = {"Gateway", "WiFi", "Telegram", "Kimi"};
         String[] sk = {"\"status\":\"up\"", "\"wifi\":true", "\"telegram\":true", "\"kimi\":true"};
         String[] von = {"OK", "ON", "Live", "OK"};
@@ -287,13 +355,10 @@ public class LauncherActivity extends Activity {
                 s.append(String.format("%s %-9s%s\n", d, sn[i], v));
             }
         }
-
-        // Extra processes (5-8) right-aligned to same edge
         for (int i = 4; i < Math.min(procCount, 8); i++) {
             s.append(String.format("%20s%-16s%5sM\n", "", procs[i][0], procs[i][1]));
         }
 
-        // Info (spread across full width = 36 chars)
         s.append('\n');
         StringBuilder left1 = new StringBuilder();
         int si = j.indexOf("\"swap\":{");
@@ -309,7 +374,6 @@ public class LauncherActivity extends Activity {
         s.append(String.format("%-21s%21s\n", left1.toString(), right1.toString()));
         s.append(String.format("%-21s%21s\n", "Bat " + getBatteryInfo(), "Disk " + getStorageInfo()));
 
-        // Parse logs from API
         ArrayList<String> logs = new ArrayList<>();
         int li = j.indexOf("\"logs\":[");
         if (li >= 0) {
@@ -329,7 +393,6 @@ public class LauncherActivity extends Activity {
             }
         }
 
-        // Log box (wide — matches content width)
         s.append('\n');
         s.append("\u250C LOG \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n");
         if (logs.isEmpty()) {

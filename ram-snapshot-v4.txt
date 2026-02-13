@@ -1,0 +1,42 @@
+# RAM Snapshot v4 — 2026-02-13
+# After: debloat v3 (19 packages) + SystemUI optimizations
+# Bot: running, gateway up, healthy
+
+Total RAM: 919996 kB (920 MB)
+Free RAM:  342338 kB (342 MB) — 29 MB cached pss + 243 MB cached kernel + 70 MB free
+Used RAM:  528737 kB (529 MB)
+Lost RAM:   48921 kB (49 MB)
+ZRAM:       2348 kB physical for 4860 kB swap (262140 kB total)
+
+## Per-process PSS (kB):
+   234314: openclaw-gateway (pid 4405)
+    54202: system (pid 2280)
+    43511: com.android.systemui (pid 3374)
+    26184: com.pocketclaw.launcher (pid 3821)
+    22046: openclaw (pid 4381)
+    18940: zygote (pid 316)
+    13214: com.termux (pid 4096)
+    12067: android.process.media (pid 3336)
+    10769: surfaceflinger (pid 258)
+    10417: mediaserver (pid 287)
+     5918: com.termux.boot (pid 4159)
+     5664: com.android.externalstorage (pid 3347)
+     5621: com.android.keychain (pid 4070)
+     5234: rild (pid 282)
+     4140: mm-pp-daemon (pid 338)
+     3998: mm-qcamera-daemon (pid 321)
+     2173: drmserver (pid 285)
+     2052: wpa_supplicant (pid 3741)
+     1916: netmgrd (pid 414)
+
+## SystemUI breakdown (43.5 MB PSS):
+  Native Heap:  6338 kB
+  Dalvik Heap:  9977 kB
+  EGL mtrack:   7996 kB
+  .oat mmap:    5035 kB
+  .dex mmap:    3672 kB
+  .so mmap:     3401 kB
+  .art mmap:    2503 kB
+  Gfx dev:      1304 kB
+  .apk mmap:    1367 kB
+  Other:        1885 kB

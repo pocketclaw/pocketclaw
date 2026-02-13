@@ -1,6 +1,6 @@
 #!/bin/bash
-# PocketClaw Debloat v3 — restore after factory reset
-# Removes 125 packages, leaves 19 active
+# PocketClaw Debloat v4 — restore after factory reset
+# Removes 125 packages, leaves 19 active, optimizes SystemUI
 # NOTE: GMS requires device admin deactivation first:
 #   Settings > Security > Device Administrators > disable "Gestionnaire d'appareils Android"
 #   Then run this script.
@@ -145,12 +145,18 @@ adb shell pm uninstall -k --user 0 com.motorola.android.dm.service
 adb shell pm uninstall -k --user 0 com.motorola.slpc_sys
 
 # System tuning (server mode)
-adb shell settings put global policy_control immersive.full=*
 adb shell settings put global window_animation_scale 0
 adb shell settings put global transition_animation_scale 0
 adb shell settings put global animator_duration_scale 0
 adb shell settings put system screen_brightness 0
 adb shell settings put system screen_off_timeout 15000
 
-echo "Debloat v3 complete. 125 packages removed, 19 remaining."
-echo "System tuning applied (immersive, no animations, brightness 0)."
+# SystemUI optimization (halves RAM from 86→43 MB)
+adb shell settings put secure sysui_qs_tiles "''"
+adb shell settings put secure icon_blacklist "bluetooth,hotspot,alarm,zen,rotate,cell,airplane,cast,location,nfc"
+adb shell settings put global low_power 1
+# NOTE: Do NOT set policy_control immersive.full=* — hides nav bar in ALL apps, user gets stuck
+
+echo "Debloat v4 complete. 125 packages removed, 19 remaining."
+echo "System tuning + SystemUI optimization applied."
+echo "SystemUI: ~43 MB (optimized). Android total: ~170 MB."
