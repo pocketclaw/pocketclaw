@@ -13,6 +13,9 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.provider.Settings;
+import android.Manifest;
+import android.content.pm.PackageManager;
+import android.util.Log;
 import android.view.Gravity;
 import android.view.View;
 import android.view.WindowManager;
@@ -24,8 +27,12 @@ import android.widget.Toast;
 
 import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.FileReader;
+import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.ArrayList;
@@ -41,7 +48,7 @@ public class LauncherActivity extends Activity {
     private int titleTapIndex = 0;
     private int offlineCount = 0;
     private boolean lastWasOnline = false;
-    private static final int OFFLINE_THRESHOLD = 60;
+    private static final int OFFLINE_THRESHOLD = 30;
     private BroadcastReceiver exitReceiver;
 
     private static final String[] DEFAULT_CRAB = {
@@ -109,10 +116,17 @@ public class LauncherActivity extends Activity {
         exitReceiver = new BroadcastReceiver() {
             @Override
             public void onReceive(Context context, Intent intent) {
-                startActivity(new Intent(Settings.ACTION_SETTINGS));
+                String action = intent.getAction();
+                if ("com.pocketclaw.TEST_PROOT".equals(action)) {
+                    testProot();
+                } else {
+                    startActivity(new Intent(Settings.ACTION_SETTINGS));
+                }
             }
         };
-        registerReceiver(exitReceiver, new IntentFilter("com.pocketclaw.EXIT"));
+        IntentFilter filter = new IntentFilter("com.pocketclaw.EXIT");
+        filter.addAction("com.pocketclaw.TEST_PROOT");
+        registerReceiver(exitReceiver, filter);
 
         float d = getResources().getDisplayMetrics().density;
 
@@ -132,6 +146,7 @@ public class LauncherActivity extends Activity {
         crabView = mono(crab[0], 11, 0xFFEE3333);
         crabView.setGravity(Gravity.CENTER_HORIZONTAL);
         crabView.setPadding(0, (int)(4*d), 0, (int)(4*d));
+        crabView.setOnLongClickListener(v -> { testProot(); return true; });
         root.addView(crabView);
 
         TextView title = mono(BLOCK_TITLE, 11, 0xFFFFFFFF);
@@ -239,6 +254,18 @@ public class LauncherActivity extends Activity {
         mainFrame.addView(navBar, navParams);
 
         setContentView(mainFrame);
+        // Request storage permission for proot test
+        if (checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.WRITE_EXTERNAL_STORAGE}, 1);
+        }
+        // Start floating crab overlay (Home button for all apps)
+        if (Settings.canDrawOverlays(this)) {
+            startService(new Intent(this, FloatingCrabService.class));
+        } else {
+            // Request overlay permission
+            startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                android.net.Uri.parse("package:" + getPackageName())));
+        }
         fetchLoop();
     }
 
@@ -441,6 +468,96 @@ public class LauncherActivity extends Activity {
         int e = i;
         while (e < j.length() && Character.isDigit(j.charAt(e))) e++;
         return e > i ? Integer.parseInt(j.substring(i, e)) : 0;
+    }
+
+    private void testProot() {
+        new Thread(() -> {
+            StringBuilder result = new StringBuilder();
+            Log.d("PocketClaw", "testProot starting");
+            try {
+                // Step 1: Copy proot + libtalloc from /sdcard/ to app data
+                File binDir = new File(getFilesDir(), "bin");
+                binDir.mkdirs();
+                File prootFile = new File(binDir, "proot");
+                File tallocFile = new File(binDir, "libtalloc.so.2");
+                copyFile(new File("/sdcard/proot"), prootFile);
+                copyFile(new File("/sdcard/libtalloc.so.2"), tallocFile);
+                prootFile.setExecutable(true, false);
+                tallocFile.setReadable(true, false);
+                result.append("1. Copied proot+lib OK\n");
+
+                // Step 2: Try to exec proot --help
+                String prootPath = prootFile.getAbsolutePath();
+                String libDir = binDir.getAbsolutePath();
+                String[] env = {"LD_LIBRARY_PATH=" + libDir, "PROOT_TMP_DIR=" + getCacheDir().getAbsolutePath()};
+                Process p = Runtime.getRuntime().exec(new String[]{prootPath, "--version"}, env);
+                String out = readStream(p.getInputStream());
+                String err = readStream(p.getErrorStream());
+                int code = p.waitFor();
+                result.append("2. proot --version: ").append(out.trim()).append(" (exit ").append(code).append(")\n");
+                if (err.length() > 0) { String te = err.trim(); result.append("   err: ").append(te.substring(0, Math.min(te.length(), 200))).append("\n"); }
+
+                // Step 3: Try proot echo inside rootfs
+                String prefix = "/data/data/com.termux/files/usr";
+                String rootfs = prefix + "/var/lib/proot-distro/installed-rootfs/ubuntu";
+                Process p2 = Runtime.getRuntime().exec(new String[]{
+                    prootPath,
+                    "--link2symlink", "--kill-on-exit", "--root-id",
+                    "--rootfs=" + rootfs,
+                    "--bind=/dev", "--bind=/proc", "--bind=/sys",
+                    "--bind=" + prefix + "/tmp:/tmp",
+                    "--bind=" + prefix + ":" + prefix,
+                    "--bind=/system:/system",
+                    "--cwd=/root",
+                    "/lib/ld-linux-armhf.so.3", "/bin/echo", "PROOT_WORKS_FROM_LAUNCHER"
+                }, new String[]{
+                    "LD_LIBRARY_PATH=" + libDir,
+                    "PROOT_TMP_DIR=" + getCacheDir().getAbsolutePath()
+                });
+                String out2 = readStream(p2.getInputStream());
+                String err2 = readStream(p2.getErrorStream());
+                int code2 = p2.waitFor();
+                result.append("3. proot echo: ").append(out2.trim()).append(" (exit ").append(code2).append(")\n");
+                if (err2.length() > 0) { String te = err2.trim(); result.append("   err: ").append(te.substring(0, Math.min(te.length(), 300))).append("\n"); }
+
+            } catch (Exception e) {
+                result.append("ERROR: ").append(e.toString());
+                Log.e("PocketClaw", "testProot error", e);
+            }
+            final String r = result.toString();
+            Log.d("PocketClaw", "testProot result: " + r);
+            // Write results to /sdcard/ for ADB access
+            try {
+                FileOutputStream fos = new FileOutputStream("/sdcard/proot-test.txt");
+                fos.write(r.getBytes());
+                fos.close();
+            } catch (Exception ex) {}
+            handler.post(() -> {
+                handler.removeCallbacks(fetchTask); // Stop fetch loop
+                statusView.setText(r);
+                statusView.setTextSize(10);
+                Toast.makeText(LauncherActivity.this, "Proot test done - see /sdcard/proot-test.txt", Toast.LENGTH_LONG).show();
+            });
+        }).start();
+    }
+
+    private void copyFile(File src, File dst) throws Exception {
+        InputStream in = new FileInputStream(src);
+        OutputStream out = new FileOutputStream(dst);
+        byte[] buf = new byte[8192];
+        int n;
+        while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+        in.close();
+        out.close();
+    }
+
+    private String readStream(InputStream is) throws Exception {
+        BufferedReader r = new BufferedReader(new InputStreamReader(is));
+        StringBuilder sb = new StringBuilder();
+        String line;
+        while ((line = r.readLine()) != null) sb.append(line).append('\n');
+        r.close();
+        return sb.toString();
     }
 
     @Override
