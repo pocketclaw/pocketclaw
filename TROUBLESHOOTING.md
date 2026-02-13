@@ -62,24 +62,32 @@ adb shell 'run-as com.termux sh -c '"'"'export LD_LIBRARY_PATH=/data/data/com.te
 
 ## 4. WiFi perd la connexion internet (pas de route par défaut)
 
-**Symptôme :** Le téléphone a une IP (192.168.1.x) mais `ping 8.8.8.8` → "Network is unreachable". `ip route` ne montre pas de route `default`.
+**Symptôme :** Le téléphone a une IP (192.168.1.x) mais `ping 8.8.8.8` → "Network is unreachable". `ip route show` ne montre pas de route `default`.
 
-**Causes possibles :**
-- DHCP lease expiré sans renouvellement
-- Un process réseau Android a crashé
-- Dirty COW sur `app_process32` a cassé le fork de zygote (voir #5)
+**Cause :** Le client DHCP d'Android 6 perd la gateway lors du renouvellement de bail. La route par défaut disparaît de la table de routage policy (table 1042) mais l'IP reste assignée.
 
-**Solution :** Toggle WiFi :
+**Note :** `ip route show` (table main) ne montre JAMAIS la gateway sur Android 6. C'est normal — Android utilise le policy routing (table 1042). Vérifier avec : `ip route show table all | grep default`.
+
+**Fix permanent — IP statique :**
+
+Configurer le WiFi en IP statique élimine le problème DHCP. Via les paramètres Android :
+1. Paramètres → Wi-Fi → Appui long sur le réseau → Modifier le réseau
+2. Options avancées → Paramètres IP → Statique
+3. IP : `192.168.1.14`, Passerelle : `192.168.1.254`, Préfixe : `24`
+4. DNS 1 : `8.8.8.8`, DNS 2 : `8.8.4.4`
+
+**Fix d'urgence — toggle mode avion (ADB uniquement) :**
 ```bash
-adb shell svc wifi disable
-sleep 3
-adb shell svc wifi enable
+adb shell "settings put global airplane_mode_on 1 && am broadcast -a android.intent.action.AIRPLANE_MODE --ez state true"
+sleep 5
+adb shell "settings put global airplane_mode_on 0 && am broadcast -a android.intent.action.AIRPLANE_MODE --ez state false"
 ```
 
-Si ça ne marche pas → reboot :
-```bash
-adb reboot
-```
+**Ce qui ne marche PAS :**
+- `svc wifi disable/enable` → le process se fait tuer (exit 137)
+- `settings put global wifi_static_*` → paramètres legacy ignorés par Android 6
+- `ndc`, `wpa_cli`, `cmd connectivity` → permission denied depuis ADB shell
+- Airplane mode depuis Termux → `ACCESS_CONTENT_PROVIDERS_EXTERNALLY` requis
 
 ---
 
