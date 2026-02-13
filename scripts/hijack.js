@@ -4,6 +4,53 @@
 const os = require("os");
 os.networkInterfaces = () => ({});
 
+// 1b. Stub unused packages — intercept require() to save ~22 MB heap
+const _Module = require("module");
+const _origRequire = _Module.prototype.require;
+const _STUB_PKGS = [
+  "highlight.js",           // 193 modules, ~12 MB
+  "highlight.js/lib/core",
+  "@anthropic-ai/sdk",      // 52 modules, ~3 MB
+  "@homebridge/ciao",       // 32 modules, ~2 MB
+  "@mariozechner/pi-tui",   // 24 modules, ~1.5 MB
+  "qrcode-terminal",        // 11 modules, ~0.7 MB
+  "source-map",             // 11 modules, ~0.7 MB
+  "source-map-support",
+  "@slack/web-api",         // unused channels
+  "@slack/bolt",
+  "@line/bot-sdk",
+  "@whiskeysockets/baileys",
+  "@buape/carbon",
+  "discord-api-types",
+  "node-edge-tts",
+  "@clack/prompts",
+  "@clack/core",
+];
+const _stubProxy = new Proxy(function(){}, {
+  get: (t, p) => {
+    if (p === "__esModule") return true;
+    if (p === "default") return _stubProxy;
+    if (p === Symbol.toPrimitive) return () => "";
+    if (p === Symbol.iterator) return function*(){};
+    return _stubProxy;
+  },
+  apply: () => _stubProxy,
+  construct: () => _stubProxy,
+});
+let _stubCount = 0;
+function _shouldStub(request) {
+  return typeof request === "string" && _STUB_PKGS.some(p => request === p || request.startsWith(p + "/"));
+}
+_Module.prototype.require = function(request) {
+  if (_shouldStub(request)) { _stubCount++; return _stubProxy; }
+  return _origRequire.apply(this, arguments);
+};
+const _origLoad = _Module._load;
+_Module._load = function(request, parent, isMain) {
+  if (_shouldStub(request)) { _stubCount++; return _stubProxy; }
+  return _origLoad.apply(this, arguments);
+};
+
 // 2. Periodic GC if --expose-gc is active (frees ~10 MB per cycle)
 if (typeof global.gc === "function") {
   setInterval(() => {
@@ -36,9 +83,10 @@ console.error = function() {
   _origErr.apply(console, arguments);
 };
 
-// 4. Dashboard — inject /dashboard, /api/status into OpenClaw's HTTP server
+// 4. Dashboard — inject /dashboard, /api/status, /api/heap into OpenClaw's HTTP server
 const _http = require("http");
 const _fs = require("fs");
+const _v8 = require("v8");
 
 // --- WiFi check (async, non-blocking, cached) ---
 let _wifiOk = false;
@@ -538,6 +586,52 @@ _http.Server.prototype.listen = function () {
         }
         if (req.url === "/api/setup" && req.method === "POST") {
           _handleSetup(req, res);
+          return true;
+        }
+        if (req.url === "/api/heap") {
+          const mem = process.memoryUsage();
+          const hs = _v8.getHeapStatistics();
+          const spaces = _v8.getHeapSpaceStatistics();
+          const mods = Object.keys(require.cache);
+          const data = {
+            process_mb: {
+              rss: Math.round(mem.rss / 1048576),
+              heapTotal: Math.round(mem.heapTotal / 1048576),
+              heapUsed: Math.round(mem.heapUsed / 1048576),
+              external: Math.round(mem.external / 1048576),
+              arrayBuffers: Math.round(mem.arrayBuffers / 1048576)
+            },
+            v8_mb: {
+              heapSizeLimit: Math.round(hs.heap_size_limit / 1048576),
+              totalHeapSize: Math.round(hs.total_heap_size / 1048576),
+              usedHeapSize: Math.round(hs.used_heap_size / 1048576),
+              totalPhysical: Math.round(hs.total_physical_size / 1048576),
+              malloced: Math.round(hs.malloced_memory / 1048576),
+              externalMem: Math.round(hs.external_memory / 1048576),
+              nativeContexts: hs.number_of_native_contexts,
+              detachedContexts: hs.number_of_detached_contexts
+            },
+            spaces: spaces.map(s => ({
+              name: s.space_name,
+              size_mb: +(s.space_size / 1048576).toFixed(1),
+              used_mb: +(s.space_used_size / 1048576).toFixed(1),
+              avail_mb: +(s.space_available_size / 1048576).toFixed(1)
+            })),
+            modules: { count: mods.length, stubbed: _stubCount, sample: mods.slice(-20).map(m => m.split("/").slice(-2).join("/")) },
+            packages: (() => {
+              const pkgs = {};
+              mods.forEach(m => {
+                const nm = m.lastIndexOf("node_modules/");
+                if (nm === -1) { pkgs["[app]"] = (pkgs["[app]"] || 0) + 1; return; }
+                const rest = m.substring(nm + 13);
+                const pkg = rest.startsWith("@") ? rest.split("/").slice(0, 2).join("/") : rest.split("/")[0];
+                pkgs[pkg] = (pkgs[pkg] || 0) + 1;
+              });
+              return Object.entries(pkgs).sort((a, b) => b[1] - a[1]).map(([n, c]) => n + ": " + c);
+            })()
+          };
+          res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+          res.end(JSON.stringify(data, null, 2));
           return true;
         }
         if (req.url === "/api/status" || req.url.indexOf("/api/status?") === 0) {

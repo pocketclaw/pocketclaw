@@ -19,3 +19,12 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+.claude/
+
+# Large binaries (deploy via adb, not git)
+tools/*.tar.xz
+tools/*.tar.gz
+
+# Temp files
+tmp-*
+CUsersrobin*

@@ -61,14 +61,15 @@ export const MessageType = {};
 export class PresenceUpdateListener {}
 export class RateLimitError extends Error { constructor() { super(); } }
 export class RequestClient { constructor() {} }
-export class Row {}'
+export class Row {}
+export class StringSelectMenu {}'
 stub_sub "@buape/carbon/gateway.js" \
   'export const GatewayIntents = {};
 export class GatewayPlugin {}'
 
 # discord-api-types
 stub_pkg "discord-api-types" \
-  '{"name":"discord-api-types","version":"0.0.0-stub","type":"module","main":"index.js","exports":{".":"./index.js","./v10":"./v10.js","./payloads/v10":"./payloads-v10.js"}}' \
+  '{"name":"discord-api-types","version":"0.0.0-stub","type":"module","main":"index.js","exports":{".":"./index.js","./v10":"./v10.js","./payloads/v10":"./payloads/v10.js","./rest/v10":"./rest/v10.js"}}' \
   'export default {};'
 stub_sub "discord-api-types/v10.js" \
   'export const ApplicationCommandOptionType = {};
@@ -78,6 +79,10 @@ export const PermissionFlagsBits = {};
 export const Routes = {};'
 stub_sub "discord-api-types/payloads-v10.js" \
   'export const PollLayoutType = {};'
+stub_sub "discord-api-types/payloads/v10.js" \
+  'export const PollLayoutType = {};'
+stub_sub "discord-api-types/rest/v10.js" \
+  'export default {};'
 
 # @line/bot-sdk
 stub_pkg "@line/bot-sdk" \
@@ -96,7 +101,8 @@ export function normalizeMessageContent() { return null; }
 export function fetchLatestBaileysVersion() { return Promise.resolve({ version: [0,0,0] }); }
 export function makeCacheableSignalKeyStore() { return {}; }
 export function makeWASocket() { return {}; }
-export function useMultiFileAuthState() { return Promise.resolve({ state: {}, saveCreds: () => {} }); }'
+export function useMultiFileAuthState() { return Promise.resolve({ state: {}, saveCreds: () => {} }); }
+export const proto = {};'
 
 # playwright-core
 stub_pkg "playwright-core" \
