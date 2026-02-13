@@ -550,13 +550,9 @@ adb shell monkey -p com.termux.boot -c android.intent.category.LAUNCHER 1
 
 <div align="center">
 
-| Dashboard v2.3 | Crab Art v2 | Termux Install |
+| Dashboard v2.3 | Crab Art v2 | Dashboard v2.2 |
 |---|---|---|
-| <img src="crab-final.png" width="180"> | <img src="crab-screenshot3.png" width="180"> | <img src="screen3.png" width="180"> |
-
-| Lock Screen | Dashboard v2.2 | Termux Session |
-|---|---|---|
-| <img src="screen4.png" width="180"> | <img src="dashboard-screenshot.png" width="180"> | <img src="screen7.png" width="180"> |
+| <img src="crab-final.png" width="180"> | <img src="crab-screenshot3.png" width="180"> | <img src="dashboard-screenshot.png" width="180"> |
 
 </div>
 
