@@ -42,3 +42,4 @@ tmp-*
 CUsersrobin*
 nul
 screen-*.png
+tools/*_lf.sh
