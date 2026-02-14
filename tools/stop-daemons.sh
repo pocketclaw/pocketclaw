@@ -1,28 +1,42 @@
 #!/system/bin/sh
-# PocketClaw daemon stopper — runs from ADB shell after reboot.
-# Requires: dirtycow, payload, app_process32.orig in /data/local/tmp/
+# PocketClaw daemon stopper + kernel tuning — runs from ADB shell after reboot.
+# Requires in /data/local/tmp/:
+#   dirtycow, payload, app_process32.orig, post_boot_tuned.sh, post_boot_original.sh
 #
-# Sequence:
-# 1. am hang --allow-restart (while app_process32 is still original)
-# 2. Dirty COW app_process32 with payload
-# 3. Background restorer watches for zygote PID change
-# 4. Watchdog triggers (~60-120s), init restarts zygote
-# 5. Payload runs in zygote domain, stops daemons via ctl.stop
-# 6. Restorer detects PID change, Dirty COWs original back (~12s)
-# 7. Payload exits, init restarts zygote with clean binary
+# Two-phase Dirty COW:
+# Phase 1: COW init.qcom.post_boot.sh → sysctl-tuned version
+# Phase 2: COW app_process32 → payload (daemon stop + ctl.start + LMK tune)
+# Restorer: restores both files after payload runs
 
 DIRTYCOW=/data/local/tmp/dirtycow
 PAYLOAD=/data/local/tmp/payload
 ORIG=/data/local/tmp/app_process32.orig
 TARGET=/system/bin/app_process32
+POST_BOOT=/system/etc/init.qcom.post_boot.sh
+POST_BOOT_TUNED=/data/local/tmp/post_boot_tuned.sh
+POST_BOOT_ORIG=/data/local/tmp/post_boot_original.sh
 
 # Sanity check
-for f in "$DIRTYCOW" "$PAYLOAD" "$ORIG"; do
+for f in "$DIRTYCOW" "$PAYLOAD" "$ORIG" "$POST_BOOT_TUNED" "$POST_BOOT_ORIG"; do
     if [ ! -f "$f" ]; then
         echo "MISSING: $f"
         exit 1
     fi
 done
+
+echo "=== PocketClaw daemon stopper + kernel tuning ==="
+
+# Capture BEFORE state
+echo ""
+echo "--- BEFORE ---"
+echo "Daemons:"
+ps | grep -E 'drmserver|mm-qcamera|audiod|rild' | grep -v grep || echo "  (none)"
+echo "Kernel:"
+echo "  vfs_cache_pressure: $(cat /proc/sys/vm/vfs_cache_pressure)"
+echo "  extra_free_kbytes:  $(cat /proc/sys/vm/extra_free_kbytes)"
+echo "  min_free_kbytes:    $(cat /proc/sys/vm/min_free_kbytes)"
+echo "  LMK minfree:        $(cat /sys/module/lowmemorykiller/parameters/minfree)"
+grep -E 'MemFree|Slab|SReclaimable' /proc/meminfo
 
 # Get current zygote PID via /proc
 ORIG_PID=""
@@ -41,39 +55,48 @@ if [ -z "$ORIG_PID" ]; then
     echo "Cannot find zygote PID"
     exit 1
 fi
+echo ""
 echo "Zygote PID: $ORIG_PID"
 
-# Check which daemons are running before
-echo "Daemons before:"
-ps | grep -E 'drmserver|mm-qcamera|audiod|rild' | grep -v grep
-
-# Step 1: Hang system (BEFORE COW — am needs working app_process32)
+# Phase 1: COW init.qcom.post_boot.sh with sysctl-tuned version
 echo ""
-echo "Step 1: am hang --allow-restart..."
+echo "Phase 1: COW post_boot.sh with sysctl script..."
+$DIRTYCOW "$POST_BOOT" "$POST_BOOT_TUNED"
+
+# Phase 2: Hang system + COW app_process32
+echo ""
+echo "Phase 2: am hang --allow-restart..."
 am hang --allow-restart &
 AM_PID=$!
 sleep 2
 
-# Step 2: Dirty COW app_process32 with payload
-echo "Step 2: Dirty COW app_process32..."
+echo "Phase 2: COW app_process32..."
 $DIRTYCOW "$TARGET" "$PAYLOAD"
-echo "COW done. Waiting for watchdog to kill zygote PID $ORIG_PID..."
+echo "Waiting for watchdog to kill zygote PID $ORIG_PID..."
 
-# Step 3: Background restorer — polls /proc/$ORIG_PID existence
+# Background restorer — polls /proc/$ORIG_PID existence
 (
-    echo "Restorer: watching /proc/$ORIG_PID..."
     while [ -d /proc/$ORIG_PID ]; do
         sleep 2
     done
-    echo "Restorer: /proc/$ORIG_PID gone — watchdog triggered"
-    sleep 5
+    echo "Restorer: zygote died"
+
+    # Wait for payload + post_boot to finish their work
+    sleep 8
+
+    # Restore app_process32 first (critical)
     echo "Restorer: restoring app_process32..."
     $DIRTYCOW "$TARGET" "$ORIG"
+
+    # Restore post_boot.sh
+    echo "Restorer: restoring post_boot.sh..."
+    $DIRTYCOW "$POST_BOOT" "$POST_BOOT_ORIG"
+
     echo "Restorer: done."
 ) &
 RESTORER_PID=$!
 
-# Step 4: Wait for the whole sequence to complete
+# Wait for the whole sequence
 WAITED=0
 while [ $WAITED -lt 240 ]; do
     if ! kill -0 $RESTORER_PID 2>/dev/null; then
@@ -95,9 +118,9 @@ fi
 # Cleanup
 kill $AM_PID 2>/dev/null || true
 
-# Verify — wait for real zygote to come back
+# Wait for real zygote to come back
 echo ""
-echo "Waiting for real zygote to restart..."
+echo "Waiting for zygote restart..."
 VWAIT=0
 while [ $VWAIT -lt 60 ]; do
     FINAL_PID=""
@@ -117,8 +140,17 @@ while [ $VWAIT -lt 60 ]; do
     VWAIT=$((VWAIT + 2))
 done
 
+echo ""
 echo "=== RESULTS ==="
 echo "Zygote PID: $ORIG_PID -> ${FINAL_PID:-NONE}"
+echo ""
 echo "Daemons after:"
 ps | grep -E 'drmserver|mm-qcamera|audiod|rild' | grep -v grep || echo "  (none running)"
+echo ""
+echo "Kernel after:"
+echo "  vfs_cache_pressure: $(cat /proc/sys/vm/vfs_cache_pressure)"
+echo "  extra_free_kbytes:  $(cat /proc/sys/vm/extra_free_kbytes)"
+echo "  min_free_kbytes:    $(cat /proc/sys/vm/min_free_kbytes)"
+echo "  LMK minfree:        $(cat /sys/module/lowmemorykiller/parameters/minfree)"
+grep -E 'MemFree|Slab|SReclaimable' /proc/meminfo
 echo "Done."
