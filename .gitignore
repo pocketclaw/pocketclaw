@@ -25,6 +25,20 @@ Thumbs.db
 tools/*.tar.xz
 tools/*.tar.gz
 
+# Compiled ARM binaries (rebuild with NDK)
+tools/payload.bin
+tools/sysctl-test
+tools/sysctl-test2
+tools/cowtest-payload
+tools/dirtycow
+tools/restarter
+
+# Original system files (captured on device)
+tools/init.qcom.post_boot.sh.orig
+tools/init.qcom.post_boot.sh.payload
+
 # Temp files
 tmp-*
 CUsersrobin*
+nul
+screen-*.png
