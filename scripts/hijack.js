@@ -4,27 +4,35 @@
 const os = require("os");
 os.networkInterfaces = () => ({});
 
-// 1b. Stub unused packages — intercept require() to save ~22 MB heap
+// 1b. Stub unused packages — intercept require() to save ~30+ MB heap (v2: path-aware)
 const _Module = require("module");
 const _origRequire = _Module.prototype.require;
 const _STUB_PKGS = [
+  // === Unused AI providers ===
   "highlight.js",           // 193 modules, ~12 MB
   "highlight.js/lib/core",
   "@anthropic-ai/sdk",      // 52 modules, ~3 MB
-  "@homebridge/ciao",       // 32 modules, ~2 MB
-  "@mariozechner/pi-tui",   // 24 modules, ~1.5 MB
-  "qrcode-terminal",        // 11 modules, ~0.7 MB
-  "source-map",             // 11 modules, ~0.7 MB
-  "source-map-support",
-  "@slack/web-api",         // unused channels
+  "@google/genai",           // Google AI
+  "@aws-sdk/client-bedrock-runtime", // AWS Bedrock
+  "@aws-sdk/client-bedrock", // AWS Bedrock
+  // === Unused channels ===
+  "@slack/web-api",
   "@slack/bolt",
   "@line/bot-sdk",
   "@whiskeysockets/baileys",
   "@buape/carbon",
   "discord-api-types",
-  "node-edge-tts",
-  "@clack/prompts",
+  // === Unused features ===
+  "@homebridge/ciao",       // 32 modules, mDNS
+  "@mariozechner/pi-tui",   // 24 modules, TUI
+  "qrcode-terminal",        // 11 modules
+  "source-map",             // 11 modules
+  "source-map-support",
+  "node-edge-tts",          // TTS
+  "@clack/prompts",         // CLI UI
   "@clack/core",
+  "cli-highlight",          // CLI syntax
+  "osc-progress",           // progress bars
 ];
 const _stubProxy = new Proxy(function(){}, {
   get: (t, p) => {
@@ -32,6 +40,7 @@ const _stubProxy = new Proxy(function(){}, {
     if (p === "default") return _stubProxy;
     if (p === Symbol.toPrimitive) return () => "";
     if (p === Symbol.iterator) return function*(){};
+    if (p === "then") return undefined;
     return _stubProxy;
   },
   apply: () => _stubProxy,
@@ -39,7 +48,14 @@ const _stubProxy = new Proxy(function(){}, {
 });
 let _stubCount = 0;
 function _shouldStub(request) {
-  return typeof request === "string" && _STUB_PKGS.some(p => request === p || request.startsWith(p + "/"));
+  if (typeof request !== "string") return false;
+  if (_STUB_PKGS.some(p => request === p || request.startsWith(p + "/"))) return true;
+  const nm = request.lastIndexOf("/node_modules/");
+  if (nm !== -1) {
+    const rest = request.substring(nm + 14);
+    return _STUB_PKGS.some(p => rest === p || rest.startsWith(p + "/"));
+  }
+  return false;
 }
 _Module.prototype.require = function(request) {
   if (_shouldStub(request)) { _stubCount++; return _stubProxy; }
