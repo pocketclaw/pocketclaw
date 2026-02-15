@@ -4,66 +4,150 @@
 const os = require("os");
 os.networkInterfaces = () => ({});
 
-// 1b. Stub unused packages — intercept require() to save ~30+ MB heap (v2: path-aware)
+// 1b. Lazy loading — defer unused modules until first access (v3: lazy proxies)
+// Unlike stubs, lazy-loaded modules are NOT broken — they load on first real use.
+// This makes PocketClaw MORE capable than base OpenClaw: everything works, only what
+// you use consumes RAM. Add Discord on Tuesday, it loads on the first message.
 const _Module = require("module");
 const _origRequire = _Module.prototype.require;
-const _STUB_PKGS = [
-  // === Unused AI providers ===
-  "highlight.js",           // 193 modules, ~12 MB
-  "highlight.js/lib/core",
-  "@anthropic-ai/sdk",      // 52 modules, ~3 MB
-  "@google/genai",           // Google AI
-  "@aws-sdk/client-bedrock-runtime", // AWS Bedrock
-  "@aws-sdk/client-bedrock", // AWS Bedrock
-  // === Unused channels ===
-  "@slack/web-api",
-  "@slack/bolt",
+const _origLoad = _Module._load;
+
+// Packages to lazy-load (by category). All are available — just deferred.
+const _LAZY_PKGS = [
+  // --- AI Provider SDKs (load when that provider handles its first request) ---
+  "@anthropic-ai/sdk",
+  "@google/genai",
+  "@aws-sdk/client-bedrock-runtime", "@aws-sdk/client-bedrock",
+  "openai",
+  "cohere-ai", "@mistralai/mistralai",
+  // --- Channel SDKs (load when that channel is activated) ---
+  "discord.js", "discord-api-types",
+  "@discordjs/rest", "@discordjs/ws", "@discordjs/collection", "@discordjs/builders",
+  "@slack/web-api", "@slack/bolt",
   "@line/bot-sdk",
   "@whiskeysockets/baileys",
   "@buape/carbon",
-  "discord-api-types",
-  // === Unused features ===
-  "@homebridge/ciao",       // 32 modules, mDNS
-  "@mariozechner/pi-tui",   // 24 modules, TUI
-  "qrcode-terminal",        // 11 modules
-  "source-map",             // 11 modules
-  "source-map-support",
-  "node-edge-tts",          // TTS
-  "@clack/prompts",         // CLI UI
-  "@clack/core",
-  "cli-highlight",          // CLI syntax
-  "osc-progress",           // progress bars
+  // --- Heavy features (load on first use) ---
+  "highlight.js", "highlight.js/lib/core",
+  "cli-highlight",
+  "source-map", "source-map-support",
+  "@homebridge/ciao",
+  "@mariozechner/pi-tui",
+  "qrcode-terminal",
+  "node-edge-tts",
+  "@clack/prompts", "@clack/core",
+  "osc-progress",
+  "diff",
+  "marked", "turndown",
+  "sharp",
+  "pdfjs-dist", "photon-node",
 ];
-const _stubProxy = new Proxy(function(){}, {
-  get: (t, p) => {
+
+// Lazy loading state
+const _lazyCache = new Map();
+const _loadingSet = new Set();
+const _lazyLog = [];
+let _lazyTotal = 0;
+let _lazyLoaded = 0;
+
+// Dead stub fallback (only used when lazy load FAILS — module not installed)
+const _deadStub = new Proxy(function(){}, {
+  get: (_, p) => {
     if (p === "__esModule") return true;
-    if (p === "default") return _stubProxy;
+    if (p === "default") return _deadStub;
     if (p === Symbol.toPrimitive) return () => "";
     if (p === Symbol.iterator) return function*(){};
     if (p === "then") return undefined;
-    return _stubProxy;
+    return _deadStub;
   },
-  apply: () => _stubProxy,
-  construct: () => _stubProxy,
+  apply: () => _deadStub,
+  construct: () => _deadStub,
 });
-let _stubCount = 0;
-function _shouldStub(request) {
+
+function _createLazy(request, parentModule) {
+  let _real = null;
+  function _resolve() {
+    if (_real !== null) return _real;
+    if (_loadingSet.has(request)) {
+      try { return _origLoad.call(_Module, request, parentModule, false); }
+      catch (e) { return _deadStub; }
+    }
+    _loadingSet.add(request);
+    const t0 = Date.now();
+    const heapBefore = process.memoryUsage().heapUsed;
+    try {
+      _real = _origRequire.call(parentModule, request);
+    } catch (e) {
+      _real = _deadStub;
+    } finally {
+      _loadingSet.delete(request);
+    }
+    const dt = Date.now() - t0;
+    const heapMB = Math.round((process.memoryUsage().heapUsed - heapBefore) / 1048576);
+    _lazyLog.push({ pkg: request, mb: heapMB, ms: dt, t: Date.now() });
+    _lazyLoaded++;
+    if (heapMB > 0) console.log("[lazy] " + request + " +" + heapMB + "MB (" + dt + "ms)");
+    return _real;
+  }
+  return new Proxy(function(){}, {
+    get(_, prop) {
+      if (prop === "then") return undefined;
+      if (prop === "__lazy__") return request;
+      if (prop === "__esModule") return true;
+      if (typeof prop === "symbol") {
+        if (prop === Symbol.toPrimitive) return () => "";
+        if (prop === Symbol.toStringTag) return "Lazy(" + request + ")";
+      }
+      return _resolve()[prop];
+    },
+    set(_, prop, value) { _resolve()[prop] = value; return true; },
+    apply(_, thisArg, args) {
+      const mod = _resolve();
+      if (typeof mod === "function") return mod.apply(thisArg, args);
+      if (mod && typeof mod.default === "function") return mod.default.apply(thisArg, args);
+      return _deadStub;
+    },
+    construct(_, args, newTarget) {
+      const mod = _resolve();
+      if (typeof mod === "function") return Reflect.construct(mod, args, newTarget);
+      if (mod && typeof mod.default === "function") return Reflect.construct(mod.default, args, newTarget);
+      return {};
+    },
+    has(_, prop) {
+      if (prop === "__lazy__" || prop === "__esModule") return true;
+      return prop in _resolve();
+    },
+    ownKeys() { return Reflect.ownKeys(_resolve()); },
+    getOwnPropertyDescriptor(_, prop) { return Object.getOwnPropertyDescriptor(_resolve(), prop); },
+    getPrototypeOf() { return Object.getPrototypeOf(_resolve()); },
+  });
+}
+
+function _shouldLazy(request) {
   if (typeof request !== "string") return false;
-  if (_STUB_PKGS.some(p => request === p || request.startsWith(p + "/"))) return true;
+  if (_LAZY_PKGS.some(p => request === p || request.startsWith(p + "/"))) return true;
   const nm = request.lastIndexOf("/node_modules/");
   if (nm !== -1) {
     const rest = request.substring(nm + 14);
-    return _STUB_PKGS.some(p => rest === p || rest.startsWith(p + "/"));
+    return _LAZY_PKGS.some(p => rest === p || rest.startsWith(p + "/"));
   }
   return false;
 }
+
 _Module.prototype.require = function(request) {
-  if (_shouldStub(request)) { _stubCount++; return _stubProxy; }
+  if (_shouldLazy(request) && !_loadingSet.has(request)) {
+    _lazyTotal++;
+    if (!_lazyCache.has(request)) _lazyCache.set(request, _createLazy(request, this));
+    return _lazyCache.get(request);
+  }
   return _origRequire.apply(this, arguments);
 };
-const _origLoad = _Module._load;
 _Module._load = function(request, parent, isMain) {
-  if (_shouldStub(request)) { _stubCount++; return _stubProxy; }
+  if (_shouldLazy(request) && !_loadingSet.has(request)) {
+    _lazyTotal++;
+    if (!_lazyCache.has(request)) _lazyCache.set(request, _createLazy(request, parent));
+    return _lazyCache.get(request);
+  }
   return _origLoad.apply(this, arguments);
 };
 
@@ -326,7 +410,7 @@ body::after{content:"";position:fixed;inset:0;background:repeating-linear-gradie
 <div class="e" id="lu">uptime: ...</div>
 <div class="e" id="le">errors: ...</div>
 </div>
-<div class="ft">V8 128MB &#x2022; PROOT &#x2022; NODE 22 &#x2022; KIMI K2.5</div>
+<div class="ft">V8 112MB &#x2022; NATIVE &#x2022; LAZY LOAD &#x2022; NODE 22</div>
 </div>
 </div>
 </div>
@@ -633,7 +717,7 @@ _http.Server.prototype.listen = function () {
               used_mb: +(s.space_used_size / 1048576).toFixed(1),
               avail_mb: +(s.space_available_size / 1048576).toFixed(1)
             })),
-            modules: { count: mods.length, stubbed: _stubCount, sample: mods.slice(-20).map(m => m.split("/").slice(-2).join("/")) },
+            modules: { count: mods.length, lazy: { intercepted: _lazyTotal, loaded: _lazyLoaded, pending: _lazyCache.size - _lazyLoaded, log: _lazyLog }, sample: mods.slice(-20).map(m => m.split("/").slice(-2).join("/")) },
             packages: (() => {
               const pkgs = {};
               mods.forEach(m => {
