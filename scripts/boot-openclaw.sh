@@ -1,6 +1,12 @@
 #!/data/data/com.termux/files/usr/bin/bash
 # Termux:Boot auto-start script for PocketClaw
-# Install: cp start-pocketclaw.sh ~/.termux/boot/start-pocketclaw.sh
+# Install: cp boot-openclaw.sh ~/.termux/boot/start-pocketclaw.sh
+#
+# Called twice per reboot cycle:
+#   1. By Android BOOT_COMPLETED — starts sshd + crons (gateway skipped if daemons present)
+#   2. By Windows PS script (simulated BOOT_COMPLETED after stop-daemons) — starts gateway
+#
+# The script is idempotent: safe to run multiple times (checks for running processes).
 
 PREFIX=/data/data/com.termux/files/usr
 LOGFILE="$PREFIX/tmp/pocketclaw-boot.log"
@@ -25,11 +31,11 @@ if [ "$WIFI_READY" -eq 0 ]; then
   log "WARNING: WiFi not ready after 60s, continuing anyway"
 fi
 
-# Start SSH server
-if sshd 2>/dev/null; then
-  log "sshd started"
+# Start SSH server (idempotent — sshd ignores if already running)
+if ! pgrep -x sshd >/dev/null 2>&1; then
+  sshd 2>/dev/null && log "sshd started" || log "WARNING: sshd failed to start"
 else
-  log "WARNING: sshd failed to start"
+  log "sshd already running"
 fi
 
 # Install cron jobs (healthcheck every 2 min, log rotation every hour)
@@ -41,28 +47,62 @@ echo "*/2 * * * * $PREFIX/bin/healthcheck" >> "$CRONTAB"
 echo "0 * * * * $PREFIX/bin/logrotate-pc" >> "$CRONTAB"
 log "Crons installed"
 
-# Start cron daemon
-if [ -f "$PREFIX/bin/applets/crond" ]; then
-  $PREFIX/bin/applets/crond -b -c "$CRON_DIR" 2>/dev/null
-  log "crond started (busybox)"
+# Start cron daemon (idempotent)
+if ! pgrep -x crond >/dev/null 2>&1; then
+  if [ -f "$PREFIX/bin/applets/crond" ]; then
+    $PREFIX/bin/applets/crond -b -c "$CRON_DIR" 2>/dev/null
+    log "crond started (busybox)"
+  else
+    crond 2>/dev/null && log "crond started" || log "WARNING: crond not found"
+  fi
 else
-  crond 2>/dev/null && log "crond started" || log "WARNING: crond not found"
+  log "crond already running"
 fi
 
-# Start the hardware monitor
-nohup monitor </dev/null >/dev/null 2>&1 &
-log "monitor started (PID $!)"
+# Check if RAM-hungry daemons are still running (drmserver, mm-qcamera, audiod)
+# If they are, the Windows PS script hasn't run stop-daemons.sh yet.
+# Skip gateway launch — it will OOM. The PS script will re-trigger BOOT_COMPLETED
+# after stop-daemons completes and these daemons are gone.
+DAEMONS_PRESENT=0
+if ps | grep -q '[d]rmserver\|[m]m-qcamera\|[a]udiod'; then
+  DAEMONS_PRESENT=1
+  log "RAM daemons still running (drmserver/qcamera/audiod) — gateway launch DEFERRED"
+  log "  → Connect USB and run pocketclaw-boot.ps1, or wait for Windows Scheduled Task"
+fi
 
-# Start the gateway
-nohup start-openclaw > "$PREFIX/tmp/openclaw-gateway.log" 2>&1 &
-log "Gateway started (PID $!)"
+# Start gateway only if:
+# 1. RAM daemons are gone (stop-daemons.sh already ran)
+# 2. Gateway is not already running
+if [ "$DAEMONS_PRESENT" -eq 0 ]; then
+  if ! pgrep -f 'openclaw-gateway\|openclaw.mjs' >/dev/null 2>&1; then
+    # Kill any orphan start-openclaw loops first
+    pkill -f 'start-openclaw' 2>/dev/null
+    sleep 1
 
-# Wait for gateway to be up
+    # Start the hardware monitor
+    if ! pgrep -f 'monitor' >/dev/null 2>&1; then
+      nohup monitor </dev/null >/dev/null 2>&1 &
+      log "monitor started (PID $!)"
+    fi
+
+    # Start gateway with watchdog loop
+    nohup start-openclaw > "$PREFIX/tmp/openclaw-gateway.log" 2>&1 &
+    log "Gateway started (PID $!)"
+  else
+    log "Gateway already running"
+  fi
+else
+  log "Gateway NOT started (waiting for daemon stopper)"
+fi
+
+# Wait for gateway to be up before background tasks
 sleep 30
 
 # Kill SystemUI (uninstalled but may respawn as zombie)
-(while true; do am force-stop com.android.systemui 2>/dev/null; sleep 60; done) &
-log "SystemUI killer started (PID $!)"
+if ! pgrep -f 'force-stop com.android.systemui' >/dev/null 2>&1; then
+  (while true; do am force-stop com.android.systemui 2>/dev/null; sleep 60; done) &
+  log "SystemUI killer started (PID $!)"
+fi
 
 # NOTE: Do NOT force-stop com.termux.boot — it sets the "stopped" flag
 # which prevents BOOT_COMPLETED broadcast on next reboot = bot won't auto-start
@@ -79,13 +119,15 @@ am force-stop com.google.android.webview 2>/dev/null
 am force-stop com.motorola.android.providers.settings 2>/dev/null
 log "Dormant services force-stopped (9 packages)"
 
-# Repeat dormant kills every 5 min (they respawn)
-(while true; do
-  sleep 300
-  am force-stop com.android.settings 2>/dev/null
-  am force-stop com.android.keychain 2>/dev/null
-  am force-stop com.android.externalstorage 2>/dev/null
-done) &
-log "Dormant killer loop started (PID $!)"
+# Repeat dormant kills every 5 min (they respawn) — only if not already running
+if ! pgrep -f 'sleep 300' >/dev/null 2>&1; then
+  (while true; do
+    sleep 300
+    am force-stop com.android.settings 2>/dev/null
+    am force-stop com.android.keychain 2>/dev/null
+    am force-stop com.android.externalstorage 2>/dev/null
+  done) &
+  log "Dormant killer loop started (PID $!)"
+fi
 
 log "=== BOOT COMPLETE ==="
