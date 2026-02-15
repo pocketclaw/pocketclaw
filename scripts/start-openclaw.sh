@@ -40,7 +40,7 @@ while true; do
   export UV_THREADPOOL_SIZE=1
   export NODE_COMPILE_CACHE="$PREFIX/tmp/v8-cache"
   mkdir -p "$NODE_COMPILE_CACHE" 2>/dev/null
-  export NODE_OPTIONS="-r $HIJACK --expose-gc --no-warnings --max-old-space-size=112 --max-semi-space-size=2"
+  export NODE_OPTIONS="-r $HIJACK --expose-gc --no-warnings --max-old-space-size=160 --max-semi-space-size=2"
 
   # Run gateway natively — no proot!
   node22-icu "$OPENCLAW_DIR/openclaw.mjs" gateway run --port 9000 --verbose 2>&1
