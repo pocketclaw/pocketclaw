@@ -33,8 +33,14 @@ while true; do
   export OPENCLAW_NO_RESPAWN=1
   export XDG_RUNTIME_DIR="$PREFIX/tmp"
   export DBUS_SESSION_BUS_ADDRESS=disabled:
-  export NODE_OPTIONS="-r $HIJACK --expose-gc --no-warnings --max-old-space-size=112 --max-semi-space-size=2"
   export TMPDIR="$PREFIX/tmp"
+
+  # UV_THREADPOOL_SIZE=1 reduces libuv threads from 4 to 1 (saves thread stacks)
+  # NODE_COMPILE_CACHE caches V8 bytecode to disk (faster restarts)
+  export UV_THREADPOOL_SIZE=1
+  export NODE_COMPILE_CACHE="$PREFIX/tmp/v8-cache"
+  mkdir -p "$NODE_COMPILE_CACHE" 2>/dev/null
+  export NODE_OPTIONS="-r $HIJACK --expose-gc --no-warnings --max-old-space-size=112 --max-semi-space-size=2"
 
   # Run gateway natively — no proot!
   node22-icu "$OPENCLAW_DIR/openclaw.mjs" gateway run --port 9000 --verbose 2>&1

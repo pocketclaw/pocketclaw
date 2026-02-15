@@ -1,5 +1,8 @@
 // PocketClaw hijack.js — Loaded via NODE_OPTIONS="-r /root/hijack.js"
 
+// 0. Enable V8 compile cache (caches bytecode to disk, faster restarts)
+try { require("module").enableCompileCache(); } catch (e) {}
+
 // 1. Fix os.networkInterfaces (broken in proot)
 const os = require("os");
 os.networkInterfaces = () => ({});
@@ -118,7 +121,11 @@ function _createLazy(request, parentModule) {
       return prop in _resolve();
     },
     ownKeys() { return Reflect.ownKeys(_resolve()); },
-    getOwnPropertyDescriptor(_, prop) { return Object.getOwnPropertyDescriptor(_resolve(), prop); },
+    getOwnPropertyDescriptor(_, prop) {
+      if (prop === "__esModule") return { value: true, writable: true, enumerable: false, configurable: true };
+      if (prop === "__lazy__") return { value: request, writable: true, enumerable: false, configurable: true };
+      return Object.getOwnPropertyDescriptor(_resolve(), prop);
+    },
     getPrototypeOf() { return Object.getPrototypeOf(_resolve()); },
   });
 }
