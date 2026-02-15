@@ -93,7 +93,7 @@ Bot:     "I'm running on a Moto E2 from 2015 with 1GB of RAM.
 - **Voice messages** — send a voice note, get a text reply (via OpenAI Whisper)
 - **Fully autonomous** — watchdog + health checks auto-restart on crash or freeze, survives reboots
 - **`pocketclaw` CLI** — `start`, `stop`, `restart`, `status`, `logs`, `monitor` from one command
-- **RAM-optimized** — 157 MB PSS with V8 heap 112 MB, native node22-icu, periodic GC, module stubs — on hardware that has 1 GB total
+- **RAM-optimized** — 155 MB PSS with V8 heap 112 MB, native node22-icu, 37 lazy proxies, periodic GC — on hardware that has 1 GB total
 - **48 documented hacks** — every impossible problem we hit, and how we solved it
 - **Native launcher** — CRT-style dashboard with animated crab, live status, RAM bar, process list, and built-in nav buttons (Settings, WiFi, Home, Back)
 - **Aggressive debloat** — 144 → 13 packages, SystemUI killed, Android system under 70 MB
@@ -124,7 +124,7 @@ If it runs on a Moto E2 from 2015, **it runs on anything you own.**
        └──────────┬───────────────┘
                   │
         ┌─────────▼──────────┐
-        │  OpenClaw Gateway  │  157 MB PSS
+        │  OpenClaw Gateway  │  155 MB PSS
         │  (port 9000)       │  (single process)
         ├────────────────────┤
         │  node22-icu        │  NDK cross-compiled
@@ -157,25 +157,25 @@ Running a modern AI gateway on 1 GB RAM requires aggressive optimization. Here's
 
 Every version squeezed more out of the same hardware:
 
-| | **v0** Initial | **v2** Debloat | **v4** SystemUI opt | **v6** Single process | **v7** Native node |
-|---|---|---|---|---|---|
-| **Packages** | 144 | 25 | 19 | 13 | **13** |
-| **Runtime** | proot | proot | proot | proot | **native node22-icu** |
-| **Gateway PSS** | ~231 MB | ~231 MB | ~234 MB | 186 MB | **157 MB** |
-| **V8 heap** | 192 MB | 192 MB | 192 MB | 160 MB | **112 MB** |
-| **Android sys** | ~450 MB | ~314 MB | ~170 MB | ~70 MB | **~70 MB** |
-| **Total RAM** | ~780 MB | ~630 MB | ~500 MB | ~393 MB | **~310 MB** |
-| **Swap** | 87 MB | 8 MB | 2 MB | 1 MB | **14 MB** |
-| **Stubs** | - | 9 packages | 9 packages | 9 packages | **12 packages** |
-| **Boot** | manual | manual | manual | full auto | **full auto** |
+| | **v0** Initial | **v2** Debloat | **v4** SystemUI opt | **v6** Single process | **v7** Native node | **v8** Lazy + tuned |
+|---|---|---|---|---|---|---|
+| **Packages** | 144 | 25 | 19 | 13 | 13 | **13** |
+| **Runtime** | proot | proot | proot | proot | native node22-icu | **native node22-icu** |
+| **Gateway RSS** | ~231 MB | ~231 MB | ~234 MB | 186 MB | 157 MB | **155 MB** |
+| **V8 heap** | 192 MB | 192 MB | 192 MB | 160 MB | 112 MB | **112 MB** |
+| **Android sys** | ~450 MB | ~314 MB | ~170 MB | ~70 MB | ~70 MB | **~70 MB** |
+| **Total RAM** | ~780 MB | ~630 MB | ~500 MB | ~393 MB | ~310 MB | **~321 MB** |
+| **Swap** | 87 MB | 8 MB | 2 MB | 1 MB | 14 MB | **14 MB** |
+| **Module loading** | - | 9 stubs | 9 stubs | 9 stubs | 12 stubs | **37 lazy proxies** |
+| **Boot** | manual | manual | manual | full auto | full auto | **full auto** |
 
-**Total gains v0 → v7:** Android 450→70 MB (-84%), Gateway 231→157 MB (-32%), proot eliminated, 131 packages removed, SystemUI eliminated, Dirty COW kernel tuning, NDK cross-compiled Node.js with ICU.
+**Total gains v0 → v8:** Android 450→70 MB (-84%), Gateway 231→155 MB (-33%), proot eliminated, 131 packages removed, SystemUI eliminated, Dirty COW kernel tuning, NDK cross-compiled Node.js with ICU, lazy loading via Proxy (all features work, only loaded on first use).
 
-### Memory budget (current — v7)
+### Memory budget (current — v8)
 
 | Component | PSS | Notes |
 |---|---|---|
-| OpenClaw gateway | 157 MB | Native node22-icu, V8 heap 112 MB, LD_PRELOAD API23 shim |
+| OpenClaw gateway | 155 MB | Native node22-icu, V8 heap 112 MB, lazy loading, LD_PRELOAD API23 shim |
 | Android system (system_server) | 72 MB | 13 packages, SystemUI dead, dormants killed every 5 min |
 | PocketClaw Launcher | 39 MB | Native HOME screen (no WebView), required by Android |
 | zygote | 32 MB | Shared fork parent (unavoidable) |
@@ -210,9 +210,13 @@ Every version squeezed more out of the same hardware:
 |---|---|
 | V8 heap 96 MB | OOM — live heap peaks at 93 MB during startup module loading |
 | V8 heap 128 MB (proot era) | OOM — working set ~124 MB with proot overhead |
-| `--jitless` | Crashes — disables WebAssembly, OpenClaw has 5 WASM deps (pdfjs, photon, doom) |
+| `--jitless` | Crashes — disables WebAssembly, OpenClaw has 5 WASM deps. On ARM32, only saves 3-5 MB anyway (no code range reservation on 32-bit) |
 | `--lite-mode` | Same crash — also disables WASM |
 | `--no-turbofan` | Exit code 9 — likely LMK kill during slower interpreter-only startup |
+| `--single-threaded` | Crashes gateway immediately at startup (silent exit, no error). Works for simple scripts but not OpenClaw |
+| `NODE_COMPILE_CACHE` | Creates versioned dir but 0 cache files on ARM32/Node 22. Research confirms: no heap reduction anyway — same bytecode objects regardless |
+| esbuild bundling | Would **increase** memory 3-4x. V8 eagerly parses single large files (loses lazy parsing). Module system overhead is only ~2 MB for 1547 modules |
+| Alternative runtimes (QuickJS, txiki.js, LLRT, Hermes) | None can run OpenClaw's 1547 npm modules. QuickJS uses 5-15 MB but lacks Node.js APIs. Would need complete rewrite |
 | Kill PocketClaw Launcher | Android respawns immediately — HOME activity required |
 | Kill Termux Dalvik | Only saves ~3 MB — shared pages stay mapped in zygote |
 | Dirty COW from Termux | SELinux blocks untrusted_app from opening /system files |
@@ -656,7 +660,7 @@ Every single problem we hit — and the hack that fixed it. From proot crashes t
 | Node.js | 22.12.0 (NDK cross-compiled with ICU, native — no proot) |
 | OpenClaw | 2026.2.9 |
 | AI Model | Kimi K2.5 (works with [any provider](#-pick-your-ai)) |
-| Debloat | v7 — 13 packages, native node22-icu, 157 MB PSS, ~310 MB total |
+| Debloat | v8 — 13 packages, native node22-icu, lazy proxies, 155 MB PSS, ~321 MB total |
 
 ---
 
