@@ -2,10 +2,8 @@
 # Termux:Boot auto-start script for PocketClaw
 # Install: cp boot-openclaw.sh ~/.termux/boot/start-pocketclaw.sh
 #
-# Called twice per reboot cycle:
-#   1. By Android BOOT_COMPLETED — starts sshd + crons (gateway skipped if daemons present)
-#   2. By Windows PS script (simulated BOOT_COMPLETED after stop-daemons) — starts gateway
-#
+# Fully autonomous — phone boots and runs everything on its own.
+# Windows PS script (pocketclaw-boot.ps1) is optional for daemon stopper via Dirty COW.
 # The script is idempotent: safe to run multiple times (checks for running processes).
 
 PREFIX=/data/data/com.termux/files/usr
@@ -59,40 +57,23 @@ else
   log "crond already running"
 fi
 
-# Check if RAM-hungry daemons are still running (drmserver, mm-qcamera, audiod)
-# If they are, the Windows PS script hasn't run stop-daemons.sh yet.
-# Skip gateway launch — it will OOM. The PS script will re-trigger BOOT_COMPLETED
-# after stop-daemons completes and these daemons are gone.
-DAEMONS_PRESENT=0
-if ps | grep -q '[d]rmserver\|[m]m-qcamera\|[a]udiod'; then
-  DAEMONS_PRESENT=1
-  log "RAM daemons still running (drmserver/qcamera/audiod) — gateway launch DEFERRED"
-  log "  → Connect USB and run pocketclaw-boot.ps1, or wait for Windows Scheduled Task"
-fi
+# Kill any orphan start-openclaw loops from previous crash/restart
+pkill -f 'start-openclaw' 2>/dev/null
+sleep 1
 
-# Start gateway only if:
-# 1. RAM daemons are gone (stop-daemons.sh already ran)
-# 2. Gateway is not already running
-if [ "$DAEMONS_PRESENT" -eq 0 ]; then
-  if ! pgrep -f 'openclaw-gateway\|openclaw.mjs' >/dev/null 2>&1; then
-    # Kill any orphan start-openclaw loops first
-    pkill -f 'start-openclaw' 2>/dev/null
-    sleep 1
-
-    # Start the hardware monitor
-    if ! pgrep -f 'monitor' >/dev/null 2>&1; then
-      nohup monitor </dev/null >/dev/null 2>&1 &
-      log "monitor started (PID $!)"
-    fi
-
-    # Start gateway with watchdog loop
-    nohup start-openclaw > "$PREFIX/tmp/openclaw-gateway.log" 2>&1 &
-    log "Gateway started (PID $!)"
-  else
-    log "Gateway already running"
+# Start gateway if not already running
+if ! pgrep -f 'openclaw-gateway\|openclaw.mjs' >/dev/null 2>&1; then
+  # Start the hardware monitor
+  if ! pgrep -f 'monitor' >/dev/null 2>&1; then
+    nohup monitor </dev/null >/dev/null 2>&1 &
+    log "monitor started (PID $!)"
   fi
+
+  # Start gateway with watchdog loop
+  nohup start-openclaw > "$PREFIX/tmp/openclaw-gateway.log" 2>&1 &
+  log "Gateway started (PID $!)"
 else
-  log "Gateway NOT started (waiting for daemon stopper)"
+  log "Gateway already running"
 fi
 
 # Wait for gateway to be up before background tasks
