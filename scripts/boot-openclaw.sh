@@ -4,10 +4,12 @@
 #
 # Fully autonomous — phone boots and runs everything on its own.
 # Windows PS script (pocketclaw-boot.ps1) is optional for daemon stopper via Dirty COW.
-# The script is idempotent: safe to run multiple times (checks for running processes).
+#
+# Uses a PID file to guarantee exactly ONE gateway instance.
 
 PREFIX=/data/data/com.termux/files/usr
 LOGFILE="$PREFIX/tmp/pocketclaw-boot.log"
+PIDFILE="$PREFIX/tmp/start-openclaw.pid"
 
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$LOGFILE"; }
 
@@ -29,7 +31,7 @@ if [ "$WIFI_READY" -eq 0 ]; then
   log "WARNING: WiFi not ready after 60s, continuing anyway"
 fi
 
-# Start SSH server (idempotent — sshd ignores if already running)
+# Start SSH server (idempotent)
 if ! pgrep -x sshd >/dev/null 2>&1; then
   sshd 2>/dev/null && log "sshd started" || log "WARNING: sshd failed to start"
 else
@@ -57,23 +59,31 @@ else
   log "crond already running"
 fi
 
-# Kill any orphan start-openclaw loops from previous crash/restart
-pkill -f 'start-openclaw' 2>/dev/null
-sleep 1
+# === GATEWAY LAUNCH (single instance via PID file) ===
+# Check if a start-openclaw is already running via PID file
+ALREADY_RUNNING=0
+if [ -f "$PIDFILE" ]; then
+  OLD_PID=$(cat "$PIDFILE" 2>/dev/null)
+  if [ -n "$OLD_PID" ] && kill -0 "$OLD_PID" 2>/dev/null; then
+    ALREADY_RUNNING=1
+    log "Gateway watchdog already running (PID $OLD_PID) — skipping"
+  else
+    log "Stale PID file (PID $OLD_PID dead) — cleaning up"
+    rm -f "$PIDFILE"
+  fi
+fi
 
-# Start gateway if not already running
-if ! pgrep -f 'openclaw-gateway\|openclaw.mjs' >/dev/null 2>&1; then
+if [ "$ALREADY_RUNNING" -eq 0 ]; then
   # Start the hardware monitor
   if ! pgrep -f 'monitor' >/dev/null 2>&1; then
     nohup monitor </dev/null >/dev/null 2>&1 &
     log "monitor started (PID $!)"
   fi
 
-  # Start gateway with watchdog loop
+  # Start gateway with watchdog loop — write PID file
   nohup start-openclaw > "$PREFIX/tmp/openclaw-gateway.log" 2>&1 &
+  echo $! > "$PIDFILE"
   log "Gateway started (PID $!)"
-else
-  log "Gateway already running"
 fi
 
 # Wait for gateway to be up before background tasks
