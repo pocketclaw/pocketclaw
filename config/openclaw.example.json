@@ -23,19 +23,19 @@
           }
         ]
       },
-      "groq": {
-        "baseUrl": "https://api.groq.com/openai/v1",
-        "apiKey": "${GROQ_API_KEY}",
+      "openai": {
+        "baseUrl": "https://api.openai.com/v1",
+        "apiKey": "${OPENAI_API_KEY}",
         "api": "openai-completions",
         "models": [
           {
-            "id": "llama-3.3-70b-versatile",
-            "name": "Llama 3.3 70B",
+            "id": "gpt-4o-mini",
+            "name": "GPT-4o Mini",
             "reasoning": false,
-            "input": ["text"],
+            "input": ["text", "image"],
             "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
-            "contextWindow": 131072,
-            "maxTokens": 8192
+            "contextWindow": 128000,
+            "maxTokens": 4096
           }
         ]
       }
@@ -45,7 +45,7 @@
     "defaults": {
       "model": {
         "primary": "kimi-coding/kimi-for-coding",
-        "fallbacks": ["groq/llama-3.3-70b-versatile"]
+        "fallbacks": ["openai/gpt-4o-mini"]
       },
       "maxConcurrent": 1,
       "subagents": {
@@ -57,7 +57,7 @@
         "id": "pocketclaw",
         "identity": {
           "name": "PocketClaw",
-          "emoji": "📱",
+          "emoji": "\ud83d\udcf1",
           "theme": "You are PocketClaw, an AI agent living inside a Moto E2 from 2015 with 1GB of RAM. You're proud of running on impossible hardware. You're concise, helpful, and have a dry humor about your hardware constraints."
         }
       }

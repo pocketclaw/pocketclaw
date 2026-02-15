@@ -1,0 +1,54 @@
+PocketClaw Debloat Snapshot v7 — Native Gateway (Feb 15, 2026)
+================================================================
+
+Migration: proot → native node22-icu (no proot overhead)
+Stack: Termux → bash → node22-icu → openclaw-gateway
+
+Active packages (13):
+  android
+  com.android.defcontainer
+  com.android.inputdevices
+  com.android.providers.settings
+  com.android.settings
+  com.android.shell
+  com.google.android.packageinstaller
+  com.google.android.webview
+  com.motorola.android.providers.settings
+  com.motorola.android.sepolicyupdate
+  com.pocketclaw.launcher
+  com.termux
+  com.termux.boot
+
+Disabled packages: 64+
+Removed packages: 126 (pm uninstall -k --user 0)
+Daemons killed (via Dirty COW): drmserver, qcamerasvr, audiod, ppd
+Daemons respawning: mediaserver, ATFWD-daemon
+
+NODE_OPTIONS: -r $HIJACK --expose-gc --no-warnings --max-old-space-size=112 --max-semi-space-size=2
+LD_PRELOAD: $PREFIX/lib/libapi23compat.so (11 API 24 symbol shims)
+
+RAM (with daemon stopper):
+  Total:   898 MB
+  Used:    310 MB (34.5%)
+  Gateway: 159 MB RSS (157 MB PSS)
+  System:   71 MB PSS
+  Launcher: 38 MB PSS
+  Zygote:   32 MB PSS
+  Other:    12 MB
+
+RAM (after reboot, no daemon stopper):
+  Used:    ~340 MB (37.8%)
+
+V8 flags tested:
+  --max-old-space-size=112: STABLE (saves 8 MB vs 128)
+  --max-old-space-size=96:  OOM (live heap peaks 93 MB at startup)
+  --max-semi-space-size=2:  OK (minimal ~1-2 MB gain)
+  --jitless:                CRASH (disables WASM, 5 WASM deps in openclaw)
+  --lite-mode:              CRASH (same WASM issue)
+  --no-turbofan:            CRASH (exit 9, LMK kill)
+
+Boot autonomy:
+  Gateway auto-start: YES (Termux boot)
+  Daemon stopper:     NO (requires ADB shell — Windows script fallback)
+
+Disk: 2.0 GB free (proot rootfs: 967 MB, pending deletion)

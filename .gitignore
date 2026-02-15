@@ -43,3 +43,6 @@ CUsersrobin*
 nul
 screen-*.png
 tools/*_lf.sh
+
+# Phone pull staging directory
+phone-pull/

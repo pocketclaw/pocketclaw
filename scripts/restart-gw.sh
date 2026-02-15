@@ -1,16 +1,13 @@
 #!/data/data/com.termux/files/usr/bin/bash
-# Clean restart: kill everything, clean locks, start fresh
-pkill -9 -f openclaw 2>/dev/null
-pkill -9 -f proot 2>/dev/null
+PREFIX=/data/data/com.termux/files/usr
+export PATH="$PREFIX/bin:$PREFIX/bin/applets:$PATH"
+# Kill gateway processes (node22 running openclaw)
+for pid in $(pgrep -f 'openclaw-gateway' 2>/dev/null) $(pgrep -f 'node22-icu.*openclaw' 2>/dev/null) $(pgrep -f 'node22.*openclaw' 2>/dev/null) $(pgrep -f 'start-openclaw' 2>/dev/null); do
+  [ "$pid" != "$$" ] && kill -9 "$pid" 2>/dev/null
+done
 sleep 3
-
-ROOTFS=/data/data/com.termux/files/usr/var/lib/proot-distro/installed-rootfs/ubuntu
+ROOTFS=$PREFIX/var/lib/proot-distro/installed-rootfs/ubuntu
+rm -f "$ROOTFS/root/.openclaw/tmp/openclaw/"*.lock 2>/dev/null
 rm -f "$ROOTFS/tmp/openclaw/"*.lock 2>/dev/null
-rm -f /data/data/com.termux/files/usr/tmp/openclaw-gateway.log
-
-remaining=$(ps | grep -E 'proot|openclaw' | grep -v grep | wc -l)
-echo "Remaining processes: $remaining"
-
-echo "Starting gateway..."
-nohup start-openclaw > /data/data/com.termux/files/usr/tmp/openclaw-gateway.log 2>&1 &
+nohup start-openclaw > "$PREFIX/tmp/openclaw-gateway.log" 2>&1 &
 echo "PID: $!"

@@ -650,7 +650,7 @@ _http.Server.prototype.listen = function () {
           res.end(JSON.stringify(data, null, 2));
           return true;
         }
-        if (req.url === "/api/status" || req.url.indexOf("/api/status?") === 0) {
+                        if (req.url === "/api/status" || req.url.indexOf("/api/status?") === 0) {
           res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*", "Cache-Control": "no-cache" });
           res.end(JSON.stringify(_getStatus()));
           return true;

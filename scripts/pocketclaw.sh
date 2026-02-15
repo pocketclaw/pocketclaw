@@ -3,15 +3,14 @@
 # Usage: pocketclaw [start|stop|restart|status|logs|monitor]
 
 PREFIX=/data/data/com.termux/files/usr
-ROOTFS=$PREFIX/var/lib/proot-distro/installed-rootfs/ubuntu
 GW_LOG="$PREFIX/tmp/openclaw-gateway.log"
 STATS_CSV="$PREFIX/tmp/pocketclaw-stats.csv"
 
 case "${1:-help}" in
 
   start)
-    if pgrep -f "openclaw-gateway" >/dev/null 2>&1; then
-      echo "Gateway already running (PID $(pgrep -f openclaw-gateway | head -1))"
+    if pgrep -f 'node22.*openclaw' >/dev/null 2>&1; then
+      echo "Gateway already running (PID $(pgrep -f 'node22.*openclaw' | head -1))"
       exit 0
     fi
     echo "Starting gateway..."
@@ -22,13 +21,15 @@ case "${1:-help}" in
 
   stop)
     echo "Stopping gateway..."
-    pkill -f openclaw 2>/dev/null
-    pkill -f proot 2>/dev/null
+    for pid in $(pgrep -f 'node22.*openclaw' 2>/dev/null) $(pgrep -f 'start-openclaw' 2>/dev/null); do
+      kill "$pid" 2>/dev/null
+    done
     sleep 2
-    remaining=$(pgrep -f "openclaw|proot" | wc -l)
+    remaining=$(pgrep -f 'node22.*openclaw' 2>/dev/null | wc -l)
     if [ "$remaining" -gt 0 ]; then
-      pkill -9 -f openclaw 2>/dev/null
-      pkill -9 -f proot 2>/dev/null
+      for pid in $(pgrep -f 'node22.*openclaw' 2>/dev/null); do
+        kill -9 "$pid" 2>/dev/null
+      done
     fi
     echo "Stopped."
     ;;
@@ -42,9 +43,9 @@ case "${1:-help}" in
     echo
 
     # Gateway
-    GW_PID=$(pgrep -f "openclaw-gateway" | head -1)
+    GW_PID=$(pgrep -f 'node22.*openclaw' | head -1)
     if [ -n "$GW_PID" ]; then
-      echo "Gateway:  RUNNING (PID $GW_PID)"
+      echo "Gateway:  RUNNING (PID $GW_PID) [native]"
     else
       echo "Gateway:  DOWN"
     fi
