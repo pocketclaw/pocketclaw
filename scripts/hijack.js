@@ -3,6 +3,9 @@
 // 0. Enable V8 compile cache (caches bytecode to disk, faster restarts)
 try { require("module").enableCompileCache(); } catch (e) {}
 
+// NOTE: node22 (no ICU) CANNOT work — OpenClaw uses Unicode regex \p{L} which requires ICU.
+// node22-icu is mandatory. The 7 MB binary size overhead is the cost of Unicode support.
+
 // 1. Fix os.networkInterfaces (broken in proot)
 const os = require("os");
 os.networkInterfaces = () => ({});
@@ -54,26 +57,30 @@ const _Module = require("module");
 const _origRequire = _Module.prototype.require;
 const _origLoad = _Module._load;
 
-// Packages to lazy-load (by category). All are available — just deferred.
-// Using namespace prefixes (e.g. "@smithy") catches ALL sub-packages.
-const _LAZY_PKGS = [
-  // --- AI Provider SDKs (load when that provider handles its first request) ---
-  "@anthropic-ai",
-  "@google",
-  "@aws-sdk", "@aws-crypto", "@aws", "@smithy",
-  "openai",
+// Dead packages — return _deadStub immediately, never load the real module.
+// These are providers/channels not used on this device. Saves ~9 MB RAM.
+// Move back to _LAZY_PKGS if you want to enable them.
+const _DEAD_PKGS = [
+  // --- Unused AI providers (no API keys configured) ---
+  "@anthropic-ai",     // Claude — not used (Kimi is primary)
+  "@google",           // Google GenAI — not used
+  "@aws-sdk", "@aws-crypto", "@aws", "@smithy",  // AWS Bedrock — not used
   "cohere-ai", "@mistralai",
   "@huggingface",
   "@cloudflare",
-  // --- Channel SDKs (load when that channel is activated) ---
-  "discord.js",
-  "@discordjs", "@buape/carbon",
-  // discord-api-types NOT lazy: ESM import from @buape/carbon breaks with CJS proxy
-  "@slack",
-  "@line",
-  "@whiskeysockets", "libsignal",
-  // grammy, @grammyjs NOT lazy: telegram channel needs Bot constructor at startup
-  "@larksuiteoapi",
+  // --- Unused channel SDKs ---
+  "discord.js", "@discordjs", "@buape/carbon",  // Discord — not used
+  "@slack",            // Slack — not used
+  "@line",             // Line — not used
+  "@whiskeysockets", "libsignal",  // WhatsApp — not used
+  "@larksuiteoapi",    // Lark — not used
+];
+
+// Packages to lazy-load (by category). All are available — just deferred.
+// Using namespace prefixes (e.g. "@smithy") catches ALL sub-packages.
+const _LAZY_PKGS = [
+  // --- AI Provider SDKs (kept lazy — may be used by Kimi's OpenAI-compat API) ---
+  "openai",
   // --- GitHub / Octokit ---
   "octokit", "@octokit",
   // --- Heavy features (load on first use) ---
@@ -195,19 +202,21 @@ function _createLazy(request, parentModule) {
   });
 }
 
-function _shouldLazy(request) {
+function _matchPkgList(request, list) {
   if (typeof request !== "string") return false;
-  if (_LAZY_PKGS.some(p => request === p || request.startsWith(p + "/"))) return true;
+  if (list.some(p => request === p || request.startsWith(p + "/"))) return true;
   const nm = request.lastIndexOf("/node_modules/");
   if (nm !== -1) {
     const rest = request.substring(nm + 14);
-    return _LAZY_PKGS.some(p => rest === p || rest.startsWith(p + "/"));
+    return list.some(p => rest === p || rest.startsWith(p + "/"));
   }
   return false;
 }
 
+let _deadCount = 0;
 _Module.prototype.require = function(request) {
-  if (_shouldLazy(request) && !_loadingSet.has(request)) {
+  if (_matchPkgList(request, _DEAD_PKGS)) { _deadCount++; _lazyTotal++; return _deadStub; }
+  if (_matchPkgList(request, _LAZY_PKGS) && !_loadingSet.has(request)) {
     _lazyTotal++;
     if (!_lazyCache.has(request)) _lazyCache.set(request, _createLazy(request, this));
     return _lazyCache.get(request);
@@ -215,7 +224,8 @@ _Module.prototype.require = function(request) {
   return _origRequire.apply(this, arguments);
 };
 _Module._load = function(request, parent, isMain) {
-  if (_shouldLazy(request) && !_loadingSet.has(request)) {
+  if (_matchPkgList(request, _DEAD_PKGS)) { _deadCount++; _lazyTotal++; return _deadStub; }
+  if (_matchPkgList(request, _LAZY_PKGS) && !_loadingSet.has(request)) {
     _lazyTotal++;
     if (!_lazyCache.has(request)) _lazyCache.set(request, _createLazy(request, parent));
     return _lazyCache.get(request);
@@ -324,7 +334,7 @@ function _getStatus() {
     kimi: !!(process.env.KIMI_API_KEY || process.env.MOONSHOT_API_KEY),
     procs: _getProcs(),
     logs: _logBuffer.slice(),
-    lazy: { total: _lazyTotal, loaded: _lazyLoaded, deferred: _lazyCache.size - _lazyLoaded }
+    lazy: { total: _lazyTotal, loaded: _lazyLoaded, deferred: _lazyCache.size - _lazyLoaded, dead: _deadCount }
   };
   try {
     const mi = _fs.readFileSync("/proc/meminfo", "utf8");
@@ -511,7 +521,7 @@ document.getElementById("procs").innerHTML=html;
 document.getElementById("lu").textContent="uptime: "+d.uptime;
 if(d.lastError){document.getElementById("le").textContent="err: "+d.lastError;document.getElementById("le").className="e er"}
 else{document.getElementById("le").textContent="errors: none";document.getElementById("le").className="e"}
-if(d.lazy)document.getElementById("lz").innerHTML="lazy: <span>"+d.lazy.loaded+"</span>/"+d.lazy.total+" loaded \\u2022 <span>"+d.lazy.deferred+"</span> deferred";
+if(d.lazy)document.getElementById("lz").innerHTML="lazy: <span>"+d.lazy.loaded+"</span>/"+d.lazy.total+" loaded \\u2022 <span>"+d.lazy.deferred+"</span> deferred \\u2022 <span>"+(d.lazy.dead||0)+"</span> dead";
 }).catch(function(){si("ig","fl");document.getElementById("vg").textContent="OFFLINE";document.getElementById("vg").className="v e"});
 document.getElementById("lb").textContent=F[t%2];t++}
 setTimeout(function(){document.getElementById("boot").classList.add("out")},3000);

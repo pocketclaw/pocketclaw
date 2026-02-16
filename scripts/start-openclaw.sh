@@ -53,6 +53,7 @@ while true; do
   echo "[$(date)] V8 heap: ${HEAP}MB"
 
   # Run gateway natively — no proot!
+  # node22 (no ICU) CANNOT work: OpenClaw uses Unicode regex \p{L} which requires ICU
   node22-icu "$OPENCLAW_DIR/openclaw.mjs" gateway run --port 9000 --verbose 2>&1
   EXIT_CODE=$?
   echo "[$(date)] Gateway exited with code $EXIT_CODE. Restarting in 10s..."
