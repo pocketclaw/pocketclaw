@@ -1,0 +1,5 @@
+# Force LF line endings for scripts (prevents CRLF breaking Android deploys)
+*.sh text eol=lf
+*.js text eol=lf
+*.json text eol=lf
+*.md text eol=lf
