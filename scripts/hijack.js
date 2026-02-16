@@ -7,6 +7,45 @@ try { require("module").enableCompileCache(); } catch (e) {}
 const os = require("os");
 os.networkInterfaces = () => ({});
 
+// 1a. Redirect /tmp and /root → real paths (Android has no /tmp or writable /root)
+const _fs0 = require("fs");
+const _REAL_TMP = (process.env.TMPDIR || "/data/data/com.termux/files/usr/tmp");
+const _REAL_HOME = (process.env.HOME || "/data/data/com.termux/files/usr/var/lib/proot-distro/installed-rootfs/ubuntu/root");
+function _fixPath(p) {
+  if (typeof p !== "string") return p;
+  if (p === "/tmp" || p.startsWith("/tmp/")) return _REAL_TMP + p.slice(4);
+  if (p === "/root" || p.startsWith("/root/")) return _REAL_HOME + p.slice(5);
+  return p;
+}
+["mkdirSync","mkdir","writeFileSync","writeFile","readFileSync","readFile",
+ "openSync","open","statSync","stat","lstatSync","lstat","existsSync",
+ "unlinkSync","unlink","readdirSync","readdir","rmdirSync","rmdir",
+ "appendFileSync","appendFile","createWriteStream","createReadStream",
+ "renameSync","rename","chmodSync","chmod","accessSync","access",
+ "copyFileSync","copyFile","rmSync","rm"].forEach(function(fn) {
+  if (typeof _fs0[fn] === "function") {
+    var orig = _fs0[fn];
+    _fs0[fn] = function() {
+      if (arguments.length > 0) arguments[0] = _fixPath(arguments[0]);
+      return orig.apply(this, arguments);
+    };
+  }
+});
+// Also patch fs.promises (OpenClaw uses async fs operations like fs.promises.mkdir)
+if (_fs0.promises) {
+  ["mkdir","writeFile","readFile","open","stat","lstat","unlink",
+   "readdir","rmdir","appendFile","rename","chmod","access",
+   "copyFile","rm"].forEach(function(fn) {
+    if (typeof _fs0.promises[fn] === "function") {
+      var orig = _fs0.promises[fn];
+      _fs0.promises[fn] = function() {
+        if (arguments.length > 0) arguments[0] = _fixPath(arguments[0]);
+        return orig.apply(this, arguments);
+      };
+    }
+  });
+}
+
 // 1b. Lazy loading — defer unused modules until first access (v3: lazy proxies)
 // Unlike stubs, lazy-loaded modules are NOT broken — they load on first real use.
 // This makes PocketClaw MORE capable than base OpenClaw: everything works, only what
@@ -16,34 +55,60 @@ const _origRequire = _Module.prototype.require;
 const _origLoad = _Module._load;
 
 // Packages to lazy-load (by category). All are available — just deferred.
+// Using namespace prefixes (e.g. "@smithy") catches ALL sub-packages.
 const _LAZY_PKGS = [
   // --- AI Provider SDKs (load when that provider handles its first request) ---
-  "@anthropic-ai/sdk",
-  "@google/genai",
-  "@aws-sdk/client-bedrock-runtime", "@aws-sdk/client-bedrock",
+  "@anthropic-ai",
+  "@google",
+  "@aws-sdk", "@aws-crypto", "@aws", "@smithy",
   "openai",
-  "cohere-ai", "@mistralai/mistralai",
+  "cohere-ai", "@mistralai",
+  "@huggingface",
+  "@cloudflare",
   // --- Channel SDKs (load when that channel is activated) ---
-  "discord.js", "discord-api-types",
-  "@discordjs/rest", "@discordjs/ws", "@discordjs/collection", "@discordjs/builders",
-  "@slack/web-api", "@slack/bolt",
-  "@line/bot-sdk",
-  "@whiskeysockets/baileys",
-  "@buape/carbon",
+  "discord.js",
+  "@discordjs", "@buape/carbon",
+  // discord-api-types NOT lazy: ESM import from @buape/carbon breaks with CJS proxy
+  "@slack",
+  "@line",
+  "@whiskeysockets", "libsignal",
+  // grammy, @grammyjs NOT lazy: telegram channel needs Bot constructor at startup
+  "@larksuiteoapi",
+  // --- GitHub / Octokit ---
+  "octokit", "@octokit",
   // --- Heavy features (load on first use) ---
-  "highlight.js", "highlight.js/lib/core",
-  "cli-highlight",
+  "highlight.js", "highlight.js/lib/core", "cli-highlight",
   "source-map", "source-map-support",
-  "@homebridge/ciao",
-  "@mariozechner/pi-tui",
+  "@homebridge",
+  "@mariozechner",
   "qrcode-terminal",
   "node-edge-tts",
-  "@clack/prompts", "@clack/core",
+  "@clack",
   "osc-progress",
   "diff",
-  "marked", "turndown",
-  "sharp",
+  "marked", "turndown", "markdown-it",
+  "sharp", "@img", "@silvia-odwyer",
   "pdfjs-dist", "photon-node",
+  // --- Build/dev tools (never needed at runtime) ---
+  "node-llama-cpp", "@node-llama-cpp",
+  "playwright-core",
+  "cmake-js",
+  "bun-types", "@types",
+  "@napi-rs", "@emnapi",
+  "@reflink",
+  // --- Heavy utilities (defer until needed) ---
+  "linkedom",
+  "jszip",
+  "music-metadata", "@borewit", "@tokenizer",
+  "simple-git", "@kwsites",
+  "lowdb", "steno",
+  "ipull",
+  // undici NOT lazy: @mariozechner/pi-ai needs EnvHttpProxyAgent constructor eagerly
+  "@agentclientprotocol",
+  "@mozilla",
+  "css-select", "css-what", "cssom",
+  "ora",
+  "file-type",
 ];
 
 // Lazy loading state
@@ -166,7 +231,7 @@ if (typeof global.gc === "function") {
     const after = process.memoryUsage().heapUsed;
     const freed = Math.round((before - after) / 1024 / 1024);
     if (freed > 5) console.log("[hijack] GC freed " + freed + " MB");
-  }, 60000);
+  }, 30000);
 }
 
 // 3. Log capture for launcher dashboard (real OpenClaw logs)
@@ -179,14 +244,14 @@ function _clean(s) {
 }
 console.log = function() {
   const msg = _clean(Array.from(arguments).join(' '));
-  _logBuffer.push(msg.substring(0, 60));
-  if (_logBuffer.length > 8) _logBuffer.shift();
+  _logBuffer.push(msg.substring(0, 120));
+  if (_logBuffer.length > 50) _logBuffer.shift();
   _origLog.apply(console, arguments);
 };
 console.error = function() {
   const msg = "! " + _clean(Array.from(arguments).join(' '));
-  _logBuffer.push(msg.substring(0, 60));
-  if (_logBuffer.length > 8) _logBuffer.shift();
+  _logBuffer.push(msg.substring(0, 120));
+  if (_logBuffer.length > 50) _logBuffer.shift();
   _origErr.apply(console, arguments);
 };
 
@@ -205,7 +270,7 @@ function _checkWifi() {
   req.on("error", () => { _wifiOk = false; });
   req.on("timeout", () => { req.destroy(); _wifiOk = false; });
 }
-setInterval(_checkWifi, 10000);
+setInterval(_checkWifi, 30000);
 setTimeout(_checkWifi, 3000);
 
 // --- Top processes (from /proc, zero shell commands) ---
@@ -258,7 +323,8 @@ function _getStatus() {
     telegram: true,
     kimi: !!(process.env.KIMI_API_KEY || process.env.MOONSHOT_API_KEY),
     procs: _getProcs(),
-    logs: _logBuffer.slice()
+    logs: _logBuffer.slice(),
+    lazy: { total: _lazyTotal, loaded: _lazyLoaded, deferred: _lazyCache.size - _lazyLoaded }
   };
   try {
     const mi = _fs.readFileSync("/proc/meminfo", "utf8");
@@ -317,16 +383,16 @@ body::after{content:"";position:fixed;inset:0;background:repeating-linear-gradie
 .cur{display:inline-block;animation:cblink .5s step-end infinite}
 @keyframes cblink{0%,100%{opacity:1}50%{opacity:0}}
 .shell{height:100%;display:flex;flex-direction:column}
-.frame{margin:6px;flex:1;border:1px solid rgba(0,255,65,.12);border-radius:5px;box-shadow:0 0 25px rgba(0,255,65,.04),inset 0 0 50px rgba(0,0,0,.5);overflow-y:auto;-webkit-overflow-scrolling:touch;position:relative}
+.frame{margin:0 6px 6px;flex:1;border:1px solid rgba(0,255,65,.12);border-radius:0 0 5px 5px;box-shadow:0 0 25px rgba(0,255,65,.04),inset 0 0 50px rgba(0,0,0,.5);overflow-y:auto;-webkit-overflow-scrolling:touch;position:relative}
 .frame::before{content:"";position:absolute;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(0,255,65,.2),transparent);animation:scanl 4s linear infinite;z-index:5;pointer-events:none}
 @keyframes scanl{0%{top:0}100%{top:100%}}
-.pad{padding:10px 12px}
-.t{text-align:center;font-size:5vw;letter-spacing:.8em;color:#0f0;margin:8px 0 2px;padding-right:-.8em;text-shadow:0 0 10px rgba(0,255,65,.5),0 0 30px rgba(0,255,65,.15);animation:glow 3s ease-in-out infinite}
+.pad{padding:10px 12px 6px}
+.t{text-align:center;font-size:5vw;letter-spacing:.8em;color:#0f0;margin:4px 0 2px;padding-right:-.8em;text-shadow:0 0 10px rgba(0,255,65,.5),0 0 30px rgba(0,255,65,.15);animation:glow 3s ease-in-out infinite}
 @keyframes glow{0%,100%{text-shadow:0 0 10px rgba(0,255,65,.5),0 0 30px rgba(0,255,65,.15)}50%{text-shadow:0 0 20px rgba(0,255,65,.7),0 0 50px rgba(0,255,65,.25)}}
 .sub{text-align:center;font-size:2vw;color:#1a3a1a;margin-bottom:2px;letter-spacing:.3em}
-.lb{text-align:center;color:#e33;font-size:2.2vw;line-height:1.2;margin:4px 0;white-space:pre;text-shadow:0 0 8px rgba(255,50,30,.6),0 0 20px rgba(255,30,10,.2);min-height:14vw;font-weight:bold}
-.sec-t{font-size:1.8vw;color:#0a3a0a;letter-spacing:.4em;text-transform:uppercase;margin:4px 0 2px 18px}
-.r{display:flex;align-items:center;padding:1vw 0;font-size:3vw}
+.lb{text-align:center;color:#e33;font-size:2.2vw;line-height:1.2;margin:2px 0;white-space:pre;text-shadow:0 0 8px rgba(255,50,30,.6),0 0 20px rgba(255,30,10,.2);min-height:12vw;font-weight:bold}
+.sec-t{font-size:1.8vw;color:#0a3a0a;letter-spacing:.4em;text-transform:uppercase;margin:6px 0 2px 18px}
+.r{display:flex;align-items:center;padding:.8vw 0;font-size:3vw}
 .i{width:16px;text-align:center;margin-right:4px;font-size:2.2vw}
 .ok{color:#0f0;text-shadow:0 0 6px rgba(0,255,65,.7);animation:pulse 2.5s ease-in-out infinite}
 .fl{color:#555}.of{color:#0a3a0a}
@@ -334,24 +400,31 @@ body::after{content:"";position:fixed;inset:0;background:repeating-linear-gradie
 .l{width:22vw;color:#073;font-size:2.8vw}
 .v{flex:1;color:#0f0;font-size:2.8vw}.v.e{color:#555}.v.d{color:#0a3a0a}
 .sp{border-top:1px solid rgba(0,255,65,.06);margin:1.5vw 0}
-.bw{padding:2px 0 2px 20px;padding-right:8px}
+.bw{padding:1px 8px 1px 20px}
 .bar{height:2.4vw;border-radius:2px;background:#001a00;border:1px solid #0a2a0a;overflow:hidden}
 .bf{height:100%;border-radius:1px;transition:width .6s ease}
 .bf.lo{background:linear-gradient(90deg,#040,#0c0)}
 .bf.md{background:linear-gradient(90deg,#060,#0f0)}
 .bf.hi{background:linear-gradient(90deg,#080,#4f4);animation:barP 1.5s ease-in-out infinite}
 @keyframes barP{0%,100%{opacity:.8}50%{opacity:1}}
-.bl{font-size:1.8vw;color:#1a3a1a;text-align:right;margin-top:1px;padding-right:2px}
-.pr{display:flex;align-items:center;padding:.6vw 0 .6vw 20px;font-size:2.4vw}
+.bl{font-size:1.6vw;color:#1a3a1a;text-align:right;margin-top:0;padding-right:2px}
+.pr{display:flex;align-items:center;padding:.5vw 0 .5vw 20px;font-size:2.4vw}
 .pn{width:28vw;color:#073;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 .pm{width:14vw;text-align:right;color:#0a0;font-size:2.2vw;padding-right:2vw}
 .pb{flex:1;height:1.8vw;background:#001a00;border-radius:1px;overflow:hidden}
 .pf{height:100%;background:linear-gradient(90deg,#040,#0c0);border-radius:1px;transition:width .6s}
-.lg{margin-top:2px;font-size:2.4vw;color:#073}
-.lg .e{padding:1px 0;padding-left:20px}
+.lg{margin-top:2px;font-size:2.2vw;color:#073}
+.lg .e{padding:1px 0;padding-left:20px;line-height:1.3}
 .lg .e::before{content:"\\203A ";color:#0a0}
 .lg .er{color:#f66}.lg .er::before{color:#f66}
-.ft{text-align:center;font-size:1.6vw;color:#082a08;padding:6px 0;letter-spacing:.2em}
+.lz{font-size:2vw;color:#073;padding:0 0 0 20px}
+.lz span{color:#0a0}
+.ft{text-align:center;font-size:1.5vw;color:#082a08;padding:4px 0;letter-spacing:.2em}
+.nav{display:flex;padding:4px 6px 0;gap:4px;position:relative;z-index:10}
+.nav a{flex:1;text-align:center;padding:1.8vw 0;font-size:2.6vw;text-decoration:none;letter-spacing:.2em;border:1px solid #0a3a0a;border-bottom:none;border-radius:4px 4px 0 0;color:#073;background:#000a00;transition:all .2s}
+.nav a.act{color:#0f0;background:#001a00;border-color:rgba(0,255,65,.2);text-shadow:0 0 6px rgba(0,255,65,.4)}
+.sw{height:1.8vw;margin-top:1px}
+.sf{height:100%;border-radius:1px;background:linear-gradient(90deg,#330,#aa0);transition:width .6s}
 </style></head><body>
 <div class="boot" id="boot">
 <div class="ln">&gt; POCKETCLAW v4.0</div>
@@ -363,67 +436,41 @@ body::after{content:"";position:fixed;inset:0;background:repeating-linear-gradie
 <div class="ln">&gt; SYSTEM ONLINE<span class="cur">_</span></div>
 </div>
 <div class="shell">
+<div class="nav"><a href="/dashboard" class="act">STATUS</a><a href="/keys">KEYS</a><a href="/logs">LOGS</a></div>
 <div class="frame">
 <div class="pad">
 <div class="t">POCKETCLAW</div>
 <div class="sub">MOTO E2 &#x2022; 1GB &#x2022; ANDROID 6</div>
 <pre class="lb" id="lb"></pre>
-<pre id="f0" hidden>            __              __
-           / &lt;\`            '&gt; \\
-          (  / @          @ \\  )
-           \\(_ _\\  .--.  /_ _)/
-         (\\ \`-/  .'  '.  \\-' /)
-          "===\\ / .::. \\ /==="
-           .==')(.:::::.)(\`==.
-          ' .='  ':::::' \`=. '
-         /  / .::::::::::. \\  \\
-        |  | (::::::::::::) |  |
-         \\  \\ '::::::::::' /  /
-          \\  \\  |  ||  |  /  /
-           \\  \\ |  ||  | /  /
-            '-.\\|__||__|/.-'
-                ^^  ^^</pre>
-<pre id="f1" hidden>            __              __
-           ( &lt;\`            '&gt; )
-          (  / @          @ \\  )
-           \\(_ _\\  .--.  /_ _)/
-         (\\ \`-/  .'  '.  \\-' /)
-          "===\\ / .::. \\ /==="
-           .==')(.:::::.)(\`==.
-          ' .='  ':::::' \`=. '
-         /  / .::::::::::. \\  \\
-        |  | (::::::::::::) |  |
-         \\  \\ '::::::::::' /  /
-          \\  \\  |  ||  |  /  /
-           \\  \\ |  ||  | /  /
-            '-.\\|__||__|/.-'
-                ^^  ^^</pre>
 <div class="sec-t">services</div>
 <div class="r"><span class="i" id="ig">&#x25CF;</span><span class="l">Gateway</span><span class="v" id="vg">...</span></div>
 <div class="r"><span class="i" id="iw">&#x25CF;</span><span class="l">WiFi</span><span class="v" id="vw">...</span></div>
 <div class="r"><span class="i" id="it">&#x25CF;</span><span class="l">Telegram</span><span class="v" id="vt">...</span></div>
 <div class="r"><span class="i" id="ik">&#x25CF;</span><span class="l">Kimi K2.5</span><span class="v" id="vk">...</span></div>
 <div class="sp"></div>
-<div class="sec-t">ram</div>
-<div class="r"><span class="i"></span><span class="l">Used</span><span class="v" id="vr">...</span></div>
-<div class="bw"><div class="bar"><div class="bf lo" id="bf" style="width:0%"></div></div></div>
-<div class="bw"><div class="bl" id="bl"></div></div>
+<div class="sec-t">memory</div>
+<div class="r"><span class="i"></span><span class="l">RAM</span><span class="v" id="vr">...</span></div>
+<div class="bw"><div class="bar"><div class="bf lo" id="bf" style="width:0%"></div></div><div class="bl" id="bl"></div></div>
 <div class="r"><span class="i"></span><span class="l">Swap</span><span class="v" id="vs">...</span></div>
+<div class="bw"><div class="bar sw"><div class="sf" id="sf" style="width:0%"></div></div></div>
 <div class="sp"></div>
 <div class="sec-t">top processes</div>
 <div id="procs"></div>
 <div class="sp"></div>
+<div class="sec-t">system</div>
 <div class="lg">
 <div class="e" id="lu">uptime: ...</div>
-<div class="e" id="le">errors: ...</div>
+<div class="e" id="le">errors: none</div>
+<div class="lz" id="lz"></div>
 </div>
-<div class="ft">V8 112MB &#x2022; NATIVE &#x2022; LAZY LOAD &#x2022; NODE 22</div>
+<div class="sp"></div>
+<div class="ft">V8 128MB &#x2022; NATIVE &#x2022; NO ICU &#x2022; NODE 22</div>
 </div>
 </div>
 </div>
 <script>
-var t=0,F=[document.getElementById("f0").textContent,document.getElementById("f1").textContent];
-var bootDone=false;
+var F=["            __              __\\n           / <\`            '> \\\\\\n          (  / @          @ \\\\  )\\n           \\\\(_ _\\\\  .--.  /_ _)/\\n         (\\\\ \`-/  .'  '.  \\\\-' /)\\n          \\"===\\\\ / .::. \\\\ /=== \\"\\n           .==')(.:::::.)(\`==.\\n          ' .='  ':::::' \`=. '\\n         /  / .::::::::::. \\\\  \\\\\\n        |  | (::::::::::::) |  |\\n         \\\\  \\\\ '::::::::::' /  /\\n          \\\\  \\\\  |  ||  |  /  /\\n           \\\\  \\\\ |  ||  | /  /\\n            '-.\\\\|__||__|/.-'\\n                ^^  ^^","            __              __\\n           ( <\`            '> )\\n          (  / @          @ \\\\  )\\n           \\\\(_ _\\\\  .--.  /_ _)/\\n         (\\\\ \`-/  .'  '.  \\\\-' /)\\n          \\"===\\\\ / .::. \\\\ /=== \\"\\n           .==')(.:::::.)(\`==.\\n          ' .='  ':::::' \`=. '\\n         /  / .::::::::::. \\\\  \\\\\\n        |  | (::::::::::::) |  |\\n         \\\\  \\\\ '::::::::::' /  /\\n          \\\\  \\\\  |  ||  |  /  /\\n           \\\\  \\\\ |  ||  | /  /\\n            '-.\\\\|__||__|/.-'\\n                ^^  ^^"];
+var t=0,bootDone=false;
 function si(id,c){document.getElementById(id).className="i "+c}
 function updateBoot(d){
 if(bootDone)return;bootDone=true;
@@ -453,8 +500,10 @@ document.getElementById("vk").className="v"+(d.kimi?"":" d");
 document.getElementById("vr").textContent=d.ram.used+"/"+d.ram.total+" MB";
 var p=Math.round(d.ram.used/d.ram.total*100),bf=document.getElementById("bf");
 bf.style.width=p+"%";bf.className="bf "+(p<60?"lo":p<80?"md":"hi");
-document.getElementById("bl").textContent=p+"%";
+document.getElementById("bl").textContent=p+"% used \\u2022 "+(d.ram.total-d.ram.used)+" MB free";
 document.getElementById("vs").textContent=d.swap.used+"/"+d.swap.total+" MB";
+var sp=d.swap.total>0?Math.round(d.swap.used/d.swap.total*100):0;
+document.getElementById("sf").style.width=sp+"%";
 var procs=d.procs||[],html="",mx=procs.length>0?procs[0].m:1;
 for(var i=0;i<procs.length;i++){var pr=procs[i],pct=Math.round(pr.m/mx*100);
 html+='<div class="pr"><span class="pn">'+pr.n.substring(0,15)+'</span><span class="pm">'+pr.m+' MB</span><div class="pb"><div class="pf" style="width:'+pct+'%"></div></div></div>';}
@@ -462,10 +511,74 @@ document.getElementById("procs").innerHTML=html;
 document.getElementById("lu").textContent="uptime: "+d.uptime;
 if(d.lastError){document.getElementById("le").textContent="err: "+d.lastError;document.getElementById("le").className="e er"}
 else{document.getElementById("le").textContent="errors: none";document.getElementById("le").className="e"}
+if(d.lazy)document.getElementById("lz").innerHTML="lazy: <span>"+d.lazy.loaded+"</span>/"+d.lazy.total+" loaded \\u2022 <span>"+d.lazy.deferred+"</span> deferred";
 }).catch(function(){si("ig","fl");document.getElementById("vg").textContent="OFFLINE";document.getElementById("vg").className="v e"});
 document.getElementById("lb").textContent=F[t%2];t++}
 setTimeout(function(){document.getElementById("boot").classList.add("out")},3000);
 go();setInterval(go,3000);
+</script></body></html>`;
+
+// --- Logs Page HTML ---
+const _LOGS = `<!DOCTYPE html><html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="theme-color" content="#000a00">
+<title>PocketClaw Logs</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#000a00;color:#0f0;font-family:'Courier New',monospace;min-height:100vh;-webkit-user-select:none}
+body::before{content:"";position:fixed;inset:0;background:radial-gradient(ellipse at center,transparent 40%,rgba(0,10,0,.7));pointer-events:none;z-index:90}
+body::after{content:"";position:fixed;inset:0;background:repeating-linear-gradient(0deg,rgba(0,0,0,.1) 0px,rgba(0,0,0,.1) 1px,transparent 1px,transparent 3px);pointer-events:none;z-index:91}
+.nav{display:flex;padding:4px 6px 0;gap:4px;position:relative;z-index:10}
+.nav a{flex:1;text-align:center;padding:1.8vw 0;font-size:2.6vw;text-decoration:none;letter-spacing:.2em;border:1px solid #0a3a0a;border-bottom:none;border-radius:4px 4px 0 0;color:#073;background:#000a00;transition:all .2s}
+.nav a.act{color:#0f0;background:#001a00;border-color:rgba(0,255,65,.2);text-shadow:0 0 6px rgba(0,255,65,.4)}
+.frame{margin:0 6px 6px;border:1px solid rgba(0,255,65,.12);border-radius:0 0 5px 5px;box-shadow:0 0 25px rgba(0,255,65,.04),inset 0 0 50px rgba(0,0,0,.5);min-height:90vh;display:flex;flex-direction:column}
+.t{text-align:center;font-size:4vw;letter-spacing:.5em;color:#0f0;margin:8px 0 2px;text-shadow:0 0 10px rgba(0,255,65,.5)}
+.sub{text-align:center;font-size:2vw;color:#1a3a1a;margin-bottom:6px;letter-spacing:.2em}
+.log-area{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:0 8px 8px;font-size:2.4vw;line-height:1.5}
+.log-area div{padding:1px 0;border-bottom:1px solid rgba(0,255,65,.03)}
+.log-area .err{color:#f66}
+.log-area .warn{color:#aa0}
+.log-area .info{color:#073}
+.log-area .time{color:#0a3a0a}
+.lazy-log{padding:8px;border-top:1px solid rgba(0,255,65,.08)}
+.lazy-t{font-size:2vw;color:#0a3a0a;letter-spacing:.3em;margin-bottom:4px}
+.lazy-e{font-size:2.2vw;padding:1px 0;color:#073}
+.lazy-e span{color:#0a0}
+.ctrl{display:flex;gap:4px;padding:4px 8px;border-top:1px solid rgba(0,255,65,.08)}
+.ctrl button{flex:1;background:#001a00;border:1px solid #0a3a0a;color:#073;font-family:'Courier New',monospace;font-size:2.4vw;padding:1.5vw;border-radius:3px;cursor:pointer}
+.ctrl button:active{background:#002a00;border-color:#0f0;color:#0f0}
+.ctrl button.on{border-color:#0f0;color:#0f0}
+</style></head><body>
+<div class="nav"><a href="/dashboard">STATUS</a><a href="/keys">KEYS</a><a href="/logs" class="act">LOGS</a></div>
+<div class="frame">
+<div class="t">LOGS</div>
+<div class="sub">REAL-TIME GATEWAY OUTPUT</div>
+<div class="log-area" id="logs"></div>
+<div class="lazy-log" id="lazy"></div>
+<div class="ctrl">
+<button id="ab" class="on" onclick="toggleAuto()">AUTO-SCROLL</button>
+<button onclick="clr()">CLEAR</button>
+</div>
+</div>
+<script>
+var auto=true,seen=0;
+function toggleAuto(){auto=!auto;document.getElementById("ab").className=auto?"on":""}
+function clr(){document.getElementById("logs").innerHTML="";seen=0}
+function esc(s){return s.replace(/&/g,"&amp;").replace(/</g,"&lt;")}
+function cls(s){if(s.indexOf("ERROR")>-1||s.indexOf("!")===0)return"err";if(s.indexOf("warn")>-1||s.indexOf("WARN")>-1)return"warn";return"info"}
+function poll(){
+fetch("/api/logs").then(function(r){return r.json()}).then(function(d){
+var el=document.getElementById("logs"),h="";
+d.lines.forEach(function(l){h+='<div class="'+cls(l)+'">'+esc(l)+"</div>"});
+el.innerHTML=h;
+if(auto)el.scrollTop=el.scrollHeight;
+var lz=d.lazy||[];
+if(lz.length>0){var lh='<div class="lazy-t">LAZY MODULES LOADED</div>';
+lz.forEach(function(e){lh+='<div class="lazy-e">'+esc(e.pkg)+' <span>+'+e.mb+'MB</span> ('+e.ms+'ms)</div>'});
+document.getElementById("lazy").innerHTML=lh}
+}).catch(function(){})}
+poll();setInterval(poll,2000);
 </script></body></html>`;
 
 // --- Setup Wizard HTML ---
@@ -565,6 +678,111 @@ else{show("Error: "+d.error,"err");document.getElementById("gobtn").disabled=fal
 }).catch(function(e){show("Connection error","err");document.getElementById("gobtn").disabled=false;document.getElementById("gobtn").textContent="\\u25B6 DEPLOY"});
 return false}
 function show(t,c){var m=document.getElementById("msg");m.textContent=t;m.className="msg "+c}
+</script></body></html>`;
+
+// --- Keys Management Page ---
+const _KEYS = `<!DOCTYPE html><html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="theme-color" content="#000a00">
+<title>PocketClaw Keys</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#000a00;color:#0f0;font-family:'Courier New',monospace;min-height:100vh;-webkit-user-select:none}
+body::before{content:"";position:fixed;inset:0;background:radial-gradient(ellipse at center,transparent 40%,rgba(0,10,0,.7));pointer-events:none;z-index:90}
+body::after{content:"";position:fixed;inset:0;background:repeating-linear-gradient(0deg,rgba(0,0,0,.1) 0px,rgba(0,0,0,.1) 1px,transparent 1px,transparent 3px);pointer-events:none;z-index:91}
+.nav{display:flex;padding:4px 6px 0;gap:4px;position:relative;z-index:10}
+.nav a{flex:1;text-align:center;padding:1.8vw 0;font-size:2.6vw;text-decoration:none;letter-spacing:.2em;border:1px solid #0a3a0a;border-bottom:none;border-radius:4px 4px 0 0;color:#073;background:#000a00;transition:all .2s}
+.nav a.act{color:#0f0;background:#001a00;border-color:rgba(0,255,65,.2);text-shadow:0 0 6px rgba(0,255,65,.4)}
+.frame{margin:0 6px 6px;border:1px solid rgba(0,255,65,.12);border-radius:0 0 5px 5px;box-shadow:0 0 25px rgba(0,255,65,.04),inset 0 0 50px rgba(0,0,0,.5);overflow-y:auto;-webkit-overflow-scrolling:touch;min-height:85vh}
+.pad{padding:12px 14px}
+.t{text-align:center;font-size:4.5vw;letter-spacing:.5em;color:#0f0;margin:6px 0 2px;text-shadow:0 0 10px rgba(0,255,65,.5)}
+.sub{text-align:center;font-size:2vw;color:#1a3a1a;margin-bottom:10px;letter-spacing:.2em}
+.key{border:1px solid #0a3a0a;border-radius:4px;padding:3vw;margin-bottom:2vw;background:rgba(0,10,0,.3)}
+.key-hd{display:flex;align-items:center;gap:2vw}
+.key-dot{width:2.5vw;height:2.5vw;border-radius:50%;flex-shrink:0}
+.key-dot.on{background:#0f0;box-shadow:0 0 6px #0f0}
+.key-dot.off{background:#333}
+.key-name{font-size:2.8vw;color:#0a0;flex:1;word-break:break-all}
+.key-val{font-size:2.4vw;color:#073;margin:1vw 0;font-family:monospace}
+.key-btns{display:flex;gap:2vw;margin-top:1.5vw}
+.btn{background:#001a00;border:1px solid #0a3a0a;color:#073;font-family:'Courier New',monospace;font-size:2.4vw;padding:1.5vw 3vw;border-radius:3px;cursor:pointer;transition:all .2s}
+.btn:active{background:#002a00;border-color:#0f0;color:#0f0}
+.btn.ok{border-color:#0f0;color:#0f0}
+.btn.err{border-color:#f66;color:#f66}
+.key-edit{display:none;margin-top:1.5vw}
+.key-edit.show{display:flex;gap:2vw;align-items:center}
+.key-edit input{flex:1;background:#001a00;border:1px solid #0a3a0a;color:#0f0;font-family:monospace;font-size:2.6vw;padding:1.5vw;border-radius:3px;outline:none}
+.key-edit input:focus{border-color:#0f0;box-shadow:0 0 6px rgba(0,255,65,.3)}
+.test-res{font-size:2.2vw;margin-top:1vw;min-height:3vw}
+.test-res.ok{color:#0f0}.test-res.err{color:#f66}
+.msg{text-align:center;padding:2vw;font-size:2.8vw;min-height:4vw}
+.msg.ok{color:#0f0}.msg.err{color:#f66}
+.sp{border-top:1px solid rgba(0,255,65,.06);margin:3vw 0}
+.add{border:1px dashed #0a3a0a;border-radius:4px;padding:3vw;margin-top:2vw}
+.add-t{font-size:2.4vw;color:#073;margin-bottom:1.5vw;letter-spacing:.2em}
+.add-row{display:flex;gap:2vw;margin-bottom:1.5vw}
+.add-row input{flex:1;background:#001a00;border:1px solid #0a3a0a;color:#0f0;font-family:monospace;font-size:2.6vw;padding:1.5vw;border-radius:3px;outline:none}
+.ft{text-align:center;font-size:1.6vw;color:#082a08;padding:8px 0;letter-spacing:.2em}
+</style></head><body>
+<div class="nav"><a href="/dashboard">STATUS</a><a href="/keys" class="act">KEYS</a><a href="/logs">LOGS</a></div>
+<div class="frame"><div class="pad">
+<div class="t">API KEYS</div>
+<div class="sub">MANAGE YOUR CREDENTIALS</div>
+<div id="keys"></div>
+<div class="msg" id="msg"></div>
+<div class="sp"></div>
+<div class="add">
+<div class="add-t">+ ADD NEW KEY</div>
+<div class="add-row"><input id="nk" placeholder="KEY_NAME" spellcheck="false"><input id="nv" placeholder="value..." type="password" spellcheck="false"></div>
+<button class="btn" onclick="addKey()">ADD</button>
+</div>
+<div class="sp"></div>
+<div class="ft">ALL KEYS STORED LOCALLY ON DEVICE</div>
+</div></div>
+<script>
+function load(){
+fetch("/api/keys").then(function(r){return r.json()}).then(function(d){
+var h="";
+d.keys.forEach(function(k){
+h+='<div class="key" id="k-'+k.name+'">';
+h+='<div class="key-hd"><div class="key-dot '+(k.set?"on":"off")+'"></div>';
+h+='<div class="key-name">'+k.name+'</div></div>';
+h+='<div class="key-val">'+(k.set?k.masked:'<span style="color:#555">not set</span>')+'</div>';
+h+='<div class="key-btns">';
+h+='<button class="btn" onclick="toggleEdit(this,\\''+k.name+'\\')">EDIT</button>';
+if(k.set)h+='<button class="btn" onclick="testKey(this,\\''+k.name+'\\')">TEST</button>';
+h+='</div>';
+h+='<div class="key-edit" id="e-'+k.name+'"><input type="password" placeholder="new value..." id="v-'+k.name+'">';
+h+='<button class="btn" onclick="saveKey(\\''+k.name+'\\')">SAVE</button></div>';
+h+='<div class="test-res" id="t-'+k.name+'"></div>';
+h+='</div>';
+});
+document.getElementById("keys").innerHTML=h;
+}).catch(function(){document.getElementById("msg").textContent="Failed to load keys";document.getElementById("msg").className="msg err"});}
+function toggleEdit(btn,name){var el=document.getElementById("e-"+name);el.className=el.className.indexOf("show")>-1?"key-edit":"key-edit show";}
+function saveKey(name){
+var v=document.getElementById("v-"+name).value;
+fetch("/api/keys",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:name,value:v})})
+.then(function(r){return r.json()}).then(function(d){
+if(d.ok){document.getElementById("msg").textContent=name+" updated";document.getElementById("msg").className="msg ok";load();}
+else{document.getElementById("msg").textContent="Error: "+d.error;document.getElementById("msg").className="msg err";}
+}).catch(function(){document.getElementById("msg").textContent="Connection error";document.getElementById("msg").className="msg err";});}
+function testKey(btn,name){
+btn.textContent="...";
+var el=document.getElementById("t-"+name);
+fetch("/api/keys/test?key="+name).then(function(r){return r.json()}).then(function(d){
+if(d.ok){el.textContent="\\u2713 Valid"+(d.info?" ("+d.info+")":"");el.className="test-res ok";btn.textContent="TEST";btn.className="btn ok";}
+else{el.textContent="\\u2717 "+(d.error||"Failed ("+d.status+")");el.className="test-res err";btn.textContent="TEST";btn.className="btn err";}
+}).catch(function(){el.textContent="Connection error";el.className="test-res err";btn.textContent="TEST";});}
+function addKey(){
+var n=document.getElementById("nk").value.trim().toUpperCase(),v=document.getElementById("nv").value.trim();
+if(!n||!v){document.getElementById("msg").textContent="Enter name and value";document.getElementById("msg").className="msg err";return;}
+fetch("/api/keys",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:n,value:v})})
+.then(function(r){return r.json()}).then(function(d){
+if(d.ok){document.getElementById("msg").textContent=n+" added";document.getElementById("msg").className="msg ok";document.getElementById("nk").value="";document.getElementById("nv").value="";load();}
+}).catch(function(){document.getElementById("msg").textContent="Error";document.getElementById("msg").className="msg err";});}
+load();
 </script></body></html>`;
 
 // --- Setup API handler ---
@@ -673,6 +891,122 @@ function _handleSetup(req, res) {
   });
 }
 
+// --- Key Management API ---
+const _ENV_FILE = (process.env.HOME || "/root") + "/.openclaw/env";
+const _KEY_NAMES = ["KIMI_API_KEY", "MOONSHOT_API_KEY", "TELEGRAM_BOT_TOKEN", "DISCORD_BOT_TOKEN", "OPENAI_API_KEY", "GROQ_API_KEY"];
+
+function _getKeys() {
+  const keys = [];
+  let envData = {};
+  try {
+    const lines = _fs.readFileSync(_ENV_FILE, "utf8").split("\n");
+    lines.forEach(function(l) {
+      const eq = l.indexOf("=");
+      if (eq > 0) envData[l.substring(0, eq).trim()] = l.substring(eq + 1).trim();
+    });
+  } catch (e) {}
+  _KEY_NAMES.forEach(function(name) {
+    const val = envData[name] || process.env[name] || "";
+    keys.push({
+      name: name,
+      set: val.length > 0,
+      masked: val.length > 12 ? val.substring(0, 8) + "..." + val.slice(-4) : (val.length > 0 ? val.substring(0, 4) + "..." : ""),
+      len: val.length
+    });
+  });
+  return { keys: keys, envFile: _ENV_FILE };
+}
+
+function _handleKeySave(req, res) {
+  let body = "";
+  req.on("data", function(c) { body += c; });
+  req.on("end", function() {
+    try {
+      const d = JSON.parse(body);
+      // Read existing env
+      let envData = {};
+      try {
+        _fs.readFileSync(_ENV_FILE, "utf8").split("\n").forEach(function(l) {
+          const eq = l.indexOf("=");
+          if (eq > 0) envData[l.substring(0, eq).trim()] = l.substring(eq + 1).trim();
+        });
+      } catch (e) {}
+      // Update keys
+      if (d.name && typeof d.value === "string") {
+        if (d.value === "") delete envData[d.name];
+        else envData[d.name] = d.value;
+        // Also update process.env so it takes effect immediately
+        if (d.value === "") delete process.env[d.name];
+        else process.env[d.name] = d.value;
+      }
+      // Write back
+      const lines = Object.keys(envData).map(function(k) { return k + "=" + envData[k]; });
+      _fs.writeFileSync(_ENV_FILE, lines.join("\n") + "\n", { mode: 0o600 });
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ ok: true }));
+    } catch (e) {
+      res.writeHead(500, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ ok: false, error: e.message }));
+    }
+  });
+}
+
+function _handleKeyTest(req, res) {
+  const url = require("url").parse(req.url, true);
+  const keyName = url.query.key;
+  const val = process.env[keyName] || "";
+  if (!val) {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ ok: false, error: "Key not set" }));
+    return;
+  }
+  // Quick validation based on key type
+  let testUrl = null, testOpts = {};
+  if (keyName === "KIMI_API_KEY" || keyName === "MOONSHOT_API_KEY") {
+    testUrl = "https://api.kimi.com/coding/v1/models";
+    testOpts = { headers: { "Authorization": "Bearer " + val, "User-Agent": "claude-code/1.0" }, timeout: 5000 };
+  } else if (keyName === "OPENAI_API_KEY") {
+    testUrl = "https://api.openai.com/v1/models";
+    testOpts = { headers: { "Authorization": "Bearer " + val }, timeout: 5000 };
+  } else if (keyName === "GROQ_API_KEY") {
+    testUrl = "https://api.groq.com/openai/v1/models";
+    testOpts = { headers: { "Authorization": "Bearer " + val }, timeout: 5000 };
+  } else if (keyName === "TELEGRAM_BOT_TOKEN") {
+    testUrl = "https://api.telegram.org/bot" + val + "/getMe";
+    testOpts = { timeout: 5000 };
+  } else if (keyName === "DISCORD_BOT_TOKEN") {
+    testUrl = "https://discord.com/api/v10/users/@me";
+    testOpts = { headers: { "Authorization": "Bot " + val }, timeout: 5000 };
+  }
+  if (!testUrl) {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ ok: false, error: "Unknown key type" }));
+    return;
+  }
+  const https = require("https");
+  const r = https.get(testUrl, testOpts, function(resp) {
+    let data = "";
+    resp.on("data", function(c) { data += c; });
+    resp.on("end", function() {
+      const ok = resp.statusCode >= 200 && resp.statusCode < 300;
+      let info = "";
+      try {
+        const j = JSON.parse(data);
+        if (keyName === "TELEGRAM_BOT_TOKEN" && j.result) info = "@" + j.result.username;
+        else if (j.data && j.data.length) info = j.data.length + " models";
+        else if (j.error) info = j.error.message || j.error.type || "";
+      } catch (e) {}
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ ok: ok, status: resp.statusCode, info: info }));
+    });
+  });
+  r.on("error", function(e) {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ ok: false, error: e.message }));
+  });
+  r.on("timeout", function() { r.destroy(); });
+}
+
 // --- Intercept HTTP server ---
 const _origListen = _http.Server.prototype.listen;
 _http.Server.prototype.listen = function () {
@@ -741,7 +1075,35 @@ _http.Server.prototype.listen = function () {
           res.end(JSON.stringify(data, null, 2));
           return true;
         }
-                        if (req.url === "/api/status" || req.url.indexOf("/api/status?") === 0) {
+        if (req.url === "/keys") {
+          res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+          res.end(_KEYS);
+          return true;
+        }
+        if (req.url === "/logs") {
+          res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+          res.end(_LOGS);
+          return true;
+        }
+        if (req.url === "/api/logs" || req.url.indexOf("/api/logs?") === 0) {
+          res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+          res.end(JSON.stringify({ lines: _logBuffer.slice(), lazy: _lazyLog.slice(-20) }));
+          return true;
+        }
+        if (req.url === "/api/keys" && req.method === "GET") {
+          res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+          res.end(JSON.stringify(_getKeys()));
+          return true;
+        }
+        if (req.url === "/api/keys" && req.method === "POST") {
+          _handleKeySave(req, res);
+          return true;
+        }
+        if (req.url && req.url.indexOf("/api/keys/test") === 0) {
+          _handleKeyTest(req, res);
+          return true;
+        }
+        if (req.url === "/api/status" || req.url.indexOf("/api/status?") === 0) {
           res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*", "Cache-Control": "no-cache" });
           res.end(JSON.stringify(_getStatus()));
           return true;

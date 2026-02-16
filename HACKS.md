@@ -1686,6 +1686,154 @@ export NODE_OPTIONS='-r /root/hijack.js --expose-gc --max-old-space-size=192'
 
 ---
 
+### Hack #47 — Native node22-icu (proot eliminated)
+
+**Problem:** proot adds ~30 MB overhead and causes subtle syscall translation bugs. The gateway was spending more time in proot's ptrace loop than doing actual work.
+
+**Solution:** Cross-compiled Node.js 22.12.0 with ICU using Android NDK for ARM32. Created `libapi23compat.so` LD_PRELOAD shim providing 11 API 24 symbols missing from Android 6.0's bionic (`in6addr_any`, `__emutls`, `getgrnam_r`, `pthread_barrier`, etc.). Gateway runs natively — no proot, no container, no chroot.
+
+```bash
+# In start-openclaw.sh
+export LD_PRELOAD="$PREFIX/lib/libapi23compat.so"
+node22-icu "$OPENCLAW_DIR/openclaw.mjs" gateway run --port 9000
+```
+
+**Impact:** -29 MB RSS, faster startup, eliminated entire class of proot-related bugs.
+
+**Status: OK — Native execution stable, 155 MB RSS**
+
+---
+
+### Hack #48 — Lazy loading v3 (Proxy-based deferred require)
+
+**Problem:** OpenClaw loads 1547 npm modules at startup. Most are never used (Discord SDK when using Telegram, Anthropic SDK when using Kimi, etc.). Previous stub approach (Hack #19) broke modules permanently — they couldn't be used even when needed.
+
+**Solution:** Proxy-based lazy loading in hijack.js. Instead of dead stubs, each deferred module gets a `Proxy` wrapper. On first property access, the real module loads transparently. This makes PocketClaw *more* capable than base OpenClaw — everything works, only what you use consumes RAM.
+
+```javascript
+// 37 package prefixes deferred (AI SDKs, channel SDKs, heavy features)
+const _LAZY_PKGS = ["@anthropic-ai", "discord.js", "openai", "sharp", ...];
+// On require("discord.js") → returns Proxy
+// On proxy.Client → loads real module, returns Client
+```
+
+**Impact:** ~40 MB deferred at startup, loads on demand. Logged via `[lazy] discord.js +12MB (340ms)`.
+
+**Status: OK — 37 lazy proxies, zero breakage, all features available on first use**
+
+---
+
+### Hack #49 — setsid gateway detach (survives Dalvik kill)
+
+**Problem:** The gateway process was a child of Termux's bash, which runs under Termux's Dalvik VM. Killing the Dalvik VM (to free 20-40 MB) also killed the gateway. The gateway needed to survive independently.
+
+**Solution:** Launch the gateway with `/system/bin/setsid` to create a new session. The process becomes a session leader with no controlling terminal, completely detached from Termux's process tree. When the Termux Dalvik is killed, the gateway keeps running.
+
+```bash
+# In start-pocketclaw.sh
+/system/bin/setsid start-openclaw > "$PREFIX/tmp/openclaw-gateway.log" 2>&1 &
+```
+
+**Why setsid and not nohup:** `nohup` only handles SIGHUP. `setsid` creates an entirely new session — the process isn't a child of anything killable. It survives `am force-stop`, `kill -9` on the parent, and Dalvik VM termination.
+
+**Status: OK — Gateway survives Dalvik kill, confirmed across reboots**
+
+---
+
+### Hack #50 — kill-dalvik cron (auto-free 20-40 MB after boot)
+
+**Problem:** After boot, Termux's Dalvik VM (`com.termux` + `com.termux.boot`) consumes 20-40 MB of RAM. Once the gateway is detached via setsid (Hack #49), these VMs serve no purpose but keep consuming memory.
+
+**Solution:** A cron job (`kill-dalvik.sh`) that checks if the gateway is running, then kills both Termux Dalvik VMs. Runs every 2 minutes. Safe because it only kills if the gateway is already alive in its detached session.
+
+```bash
+#!/data/data/com.termux/files/usr/bin/bash
+# Only kill if gateway is running
+if ! ps 2>/dev/null | grep -q "openclaw-gateway"; then exit 0; fi
+for PROC in "com.termux$" "com.termux.boot$"; do
+  PID=$(ps 2>/dev/null | grep "$PROC" | grep -v grep | awk '{print $2}')
+  [ -n "$PID" ] && kill -9 $PID 2>/dev/null
+done
+```
+
+**Impact:** -20 to -40 MB RAM after first cron run post-boot. Combined with setsid, achieves **Dalvik-free operation** — gateway runs with zero Java VMs.
+
+**Status: OK — Confirmed 364 MB total (was 384+ with Dalviks alive)**
+
+---
+
+### Hack #51 — fs.promises patching (EACCES on /root paths)
+
+**Problem:** OpenClaw uses `fs.promises.mkdir("/root/.openclaw/...")` internally. In native mode (no proot), `/root` doesn't exist on Android — it's a kernel mount point with no write permissions. The Telegram channel would crash with `EACCES: permission denied, mkdir '/root/.openclaw/tmp/openclaw'`.
+
+**Solution:** Extended the path-rewriting shim in hijack.js to also patch `fs.promises`. The original shim (Hack #4) only patched synchronous `fs` methods. OpenClaw's async code paths use `fs.promises.mkdir`, `fs.promises.writeFile`, etc., which bypassed the shim entirely.
+
+```javascript
+// Patch fs.promises (OpenClaw uses async fs operations)
+if (_fs0.promises) {
+  ["mkdir","writeFile","readFile","open","stat","lstat","unlink",
+   "readdir","rmdir","appendFile","rename","chmod","access",
+   "copyFile","rm"].forEach(function(fn) {
+    if (typeof _fs0.promises[fn] === "function") {
+      var orig = _fs0.promises[fn];
+      _fs0.promises[fn] = function() {
+        if (arguments.length > 0) arguments[0] = _fixPath(arguments[0]);
+        return orig.apply(this, arguments);
+      };
+    }
+  });
+}
+```
+
+**Status: OK — Telegram channel works, all async fs operations redirected**
+
+---
+
+### Hack #52 — 3-page dashboard (STATUS / KEYS / LOGS)
+
+**Problem:** The original dashboard (Hack #29) was a single page showing system status. As PocketClaw grew, there was no way to view real-time logs or manage API keys without SSH access.
+
+**Solution:** Extended the hijack.js HTTP interceptor to serve three pages with tab navigation:
+
+1. **STATUS** (`/dashboard`) — Live system status: services, RAM bar, swap, top processes, uptime, lazy loading stats, animated CRT crab
+2. **KEYS** (`/keys`) — API key management: view masked keys, edit values, test connectivity (hits provider API endpoints)
+3. **LOGS** (`/logs`) — Real-time gateway logs with auto-scroll, color-coded errors/warnings, lazy module load history
+
+All pages share the CRT green-on-black aesthetic with scanline effects, share a tab bar, and auto-refresh every 2-3 seconds.
+
+```
+Routes injected into OpenClaw's HTTP server:
+/dashboard  → STATUS page (HTML)
+/keys       → KEYS page (HTML)
+/logs       → LOGS page (HTML)
+/api/status → JSON status data
+/api/heap   → V8 heap diagnostics
+/api/keys   → Key list (GET) / Key save (POST)
+/api/keys/test → Test key validity
+/api/logs   → Log buffer + lazy log
+```
+
+**Status: OK — All 3 pages functional, accessible at phone IP:9000**
+
+---
+
+### Hack #53 — API key management (test/edit/add via dashboard)
+
+**Problem:** Changing API keys required SSH access to edit the env file manually. Testing if a key was valid meant crafting curl commands. Not practical for a device meant to run autonomously.
+
+**Solution:** Full key management API and UI in the KEYS dashboard page:
+
+- **View:** Shows all configured keys (KIMI, MOONSHOT, TELEGRAM, DISCORD, OPENAI, GROQ) with masked values
+- **Edit:** Inline edit field, saves to env file and updates `process.env` live (no restart needed)
+- **Test:** One-tap validation — hits each provider's API endpoint (`/v1/models` for AI providers, `/getMe` for Telegram, `/@me` for Discord) and shows result
+- **Add:** Add arbitrary new keys via name/value form
+
+Keys are stored in `~/.openclaw/env` with mode 0600. The test endpoint uses HTTPS with 5-second timeout.
+
+**Status: OK — Keys editable and testable from any browser on the local network**
+
+---
+
 *"On m'a dit que c'était impossible, alors je l'ai fait." — Probablement pas Einstein, mais on s'en fout.*
 
-*Total : ~14 heures. 46 hacks. 0 EUR de hardware. Un Moto E2 de 2015 transformé en PocketClaw OS : agent IA autonome, dashboard CRT green, setup wizard web, installer one-liner, headless server mode avec Android à 196 MB. Un brick. Un factory reset. Des leçons. De PoC à produit installable.*
+*Total : ~18 heures. 53 hacks. 0 EUR de hardware. Un Moto E2 de 2015 transforme en PocketClaw OS : agent IA autonome, dashboard CRT 3 pages, setup wizard web, boot autonome sans Dalvik, headless server mode avec Android a 290 MB. Un brick. Un factory reset. Des lecons. De PoC a produit installable.*

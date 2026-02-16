@@ -20,6 +20,7 @@ while true; do
   echo "[$(date)] Gateway starting..."
   rm -f "$OPENCLAW_HOME/tmp/openclaw/"*.lock 2>/dev/null
   rm -f "$ROOTFS/tmp/openclaw/"*.lock 2>/dev/null
+  rm -f "$PREFIX/tmp/openclaw/"*.lock 2>/dev/null
 
   # Source API keys
   if [ -f "$OPENCLAW_HOME/env" ]; then
@@ -30,7 +31,7 @@ while true; do
   # Set env for openclaw
   export HOME="$ROOTFS/root"
   export SHELL="$PREFIX/bin/bash"
-  export OPENCLAW_NO_RESPAWN=1
+  # OPENCLAW_NO_RESPAWN=1 removed: it causes gateway to exit instead of staying alive
   export XDG_RUNTIME_DIR="$PREFIX/tmp"
   export DBUS_SESSION_BUS_ADDRESS=disabled:
   export TMPDIR="$PREFIX/tmp"
@@ -40,11 +41,13 @@ while true; do
   export UV_THREADPOOL_SIZE=1
   export NODE_COMPILE_CACHE="$PREFIX/tmp/v8-cache"
   mkdir -p "$NODE_COMPILE_CACHE" 2>/dev/null
-  export NODE_OPTIONS="-r $HIJACK --expose-gc --no-warnings --max-old-space-size=160 --max-semi-space-size=2"
+  export ANDROID_DATA=/data
+  export ANDROID_ROOT=/system
+  export NODE_OPTIONS="-r $HIJACK --expose-gc --no-warnings --max-old-space-size=128 --max-semi-space-size=1 --initial-old-space-size=32"
 
   # Run gateway natively — no proot!
-  node22-icu "$OPENCLAW_DIR/openclaw.mjs" gateway run --port 9000 --verbose 2>&1
-
-  echo "[$(date)] Gateway exited. Restarting in 10s..."
+  node22 "$OPENCLAW_DIR/openclaw.mjs" gateway run --port 9000 --verbose 2>&1
+  EXIT_CODE=$?
+  echo "[$(date)] Gateway exited with code $EXIT_CODE. Restarting in 10s..."
   sleep 10
 done

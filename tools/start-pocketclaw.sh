@@ -25,11 +25,15 @@ if [ "$WIFI_READY" -eq 0 ]; then
   log "WARNING: WiFi not ready after 60s, continuing anyway"
 fi
 
-# Start SSH server
-if sshd 2>/dev/null; then
-  log "sshd started"
+# Start SSH server (optional — set POCKETCLAW_SSH=1 to enable, or default on)
+if [ "${POCKETCLAW_SSH:-1}" = "1" ]; then
+  if sshd 2>/dev/null; then
+    log "sshd started"
+  else
+    log "WARNING: sshd failed to start"
+  fi
 else
-  log "WARNING: sshd failed to start"
+  log "sshd skipped (POCKETCLAW_SSH=0)"
 fi
 
 # Install cron jobs (healthcheck every 2 min, log rotation every hour)
@@ -39,6 +43,7 @@ CRONTAB="$CRON_DIR/$(whoami)"
 echo "*/2 * * * * $PREFIX/bin/wifi-watchdog" > "$CRONTAB"
 echo "*/2 * * * * $PREFIX/bin/healthcheck" >> "$CRONTAB"
 echo "0 * * * * $PREFIX/bin/logrotate-pc" >> "$CRONTAB"
+echo "*/2 * * * * $PREFIX/bin/kill-dalvik" >> "$CRONTAB"
 log "Crons installed"
 
 # Start cron daemon
@@ -49,43 +54,38 @@ else
   crond 2>/dev/null && log "crond started" || log "WARNING: crond not found"
 fi
 
-# Start the hardware monitor
-nohup monitor </dev/null >/dev/null 2>&1 &
-log "monitor started (PID $!)"
+# monitor removed — dashboard shows live stats, CSV logging unnecessary
 
-# Start the gateway
-nohup start-openclaw > "$PREFIX/tmp/openclaw-gateway.log" 2>&1 &
-log "Gateway started (PID $!)"
+# Start the gateway in a NEW SESSION (setsid) so it survives Dalvik kill
+/system/bin/setsid start-openclaw > "$PREFIX/tmp/openclaw-gateway.log" 2>&1 &
+log "Gateway started in detached session (PID $!)"
 
 # Wait for gateway to be up
 sleep 30
-
-# Kill SystemUI (uninstalled but may respawn as zombie)
-(while true; do am force-stop com.android.systemui 2>/dev/null; sleep 60; done) &
-log "SystemUI killer started (PID $!)"
 
 # NOTE: Do NOT force-stop com.termux.boot — it sets the "stopped" flag
 # which prevents BOOT_COMPLETED broadcast on next reboot = bot won't auto-start
 
 # Kill dormant services (first pass)
-am force-stop com.android.settings 2>/dev/null
-am force-stop com.android.keychain 2>/dev/null
-am force-stop com.android.externalstorage 2>/dev/null
-am force-stop com.android.defcontainer 2>/dev/null
-am force-stop com.android.providers.downloads 2>/dev/null
-am force-stop com.android.providers.downloads.ui 2>/dev/null
-am force-stop com.google.android.packageinstaller 2>/dev/null
-am force-stop com.google.android.webview 2>/dev/null
-am force-stop com.motorola.android.providers.settings 2>/dev/null
-log "Dormant services force-stopped (9 packages)"
+for PKG in com.android.systemui com.android.settings com.android.keychain \
+  com.android.externalstorage com.android.defcontainer \
+  com.android.providers.downloads com.android.providers.downloads.ui \
+  com.google.android.packageinstaller com.google.android.webview \
+  com.motorola.android.providers.settings com.android.location.fused \
+  com.motorola.ccc.devicemanagement; do
+  am force-stop "$PKG" 2>/dev/null
+done
+log "Dormant services force-stopped (12 packages)"
 
-# Repeat dormant kills every 5 min (they respawn)
+# Single merged kill loop: SystemUI + dormants every 5 min (saves 2 bash processes)
 (while true; do
   sleep 300
-  am force-stop com.android.settings 2>/dev/null
-  am force-stop com.android.keychain 2>/dev/null
-  am force-stop com.android.externalstorage 2>/dev/null
+  for PKG in com.android.systemui com.android.settings com.android.keychain \
+    com.android.externalstorage com.android.defcontainer \
+    com.android.location.fused com.motorola.ccc.devicemanagement; do
+    am force-stop "$PKG" 2>/dev/null
+  done
 done) &
-log "Dormant killer loop started (PID $!)"
+log "Merged kill loop started (PID $!)"
 
 log "=== BOOT COMPLETE ==="
