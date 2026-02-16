@@ -43,7 +43,14 @@ while true; do
   mkdir -p "$NODE_COMPILE_CACHE" 2>/dev/null
   export ANDROID_DATA=/data
   export ANDROID_ROOT=/system
-  export NODE_OPTIONS="-r $HIJACK --expose-gc --no-warnings --max-old-space-size=180 --max-semi-space-size=1"
+  # Dynamic heap: 180 MB during boot (Dalviks alive, tight RAM), 128 MB after (Dalviks dead)
+  if /system/bin/ps 2>/dev/null | grep -q "com.termux.boot$"; then
+    HEAP=180
+  else
+    HEAP=150
+  fi
+  export NODE_OPTIONS="-r $HIJACK --expose-gc --no-warnings --max-old-space-size=$HEAP --max-semi-space-size=1"
+  echo "[$(date)] V8 heap: ${HEAP}MB"
 
   # Run gateway natively — no proot!
   node22-icu "$OPENCLAW_DIR/openclaw.mjs" gateway run --port 9000 --verbose 2>&1
