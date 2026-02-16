@@ -43,10 +43,10 @@ while true; do
   mkdir -p "$NODE_COMPILE_CACHE" 2>/dev/null
   export ANDROID_DATA=/data
   export ANDROID_ROOT=/system
-  export NODE_OPTIONS="-r $HIJACK --expose-gc --no-warnings --max-old-space-size=128 --max-semi-space-size=1 --initial-old-space-size=32"
+  export NODE_OPTIONS="-r $HIJACK --expose-gc --no-warnings --max-old-space-size=180 --max-semi-space-size=1"
 
   # Run gateway natively — no proot!
-  node22 "$OPENCLAW_DIR/openclaw.mjs" gateway run --port 9000 --verbose 2>&1
+  node22-icu "$OPENCLAW_DIR/openclaw.mjs" gateway run --port 9000 --verbose 2>&1
   EXIT_CODE=$?
   echo "[$(date)] Gateway exited with code $EXIT_CODE. Restarting in 10s..."
   sleep 10

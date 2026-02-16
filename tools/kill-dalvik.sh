@@ -1,18 +1,25 @@
 #!/data/data/com.termux/files/usr/bin/bash
-# kill-dalvik.sh — Kill Termux Dalvik VMs to free ~40-90 MB RAM
-# Safe: only kills if gateway is already running in a detached session
+# kill-dalvik.sh — Kill Termux:Boot Dalvik VM to free ~40 MB RAM
+# Safe: only kills com.termux.boot (not com.termux itself).
+#
+# WHY NOT kill com.termux?
+# Android's AMS uses cgroups: killing com.termux Dalvik cascade-kills ALL
+# processes in its cgroup (gateway, crond, bash — everything). The gateway
+# cannot survive this. Only an external restart (via ADB) can recover.
+# com.termux.boot is a SEPARATE package so killing it is safe.
+#
+# MUST use /system/bin/ps (shows all processes including Dalvik VMs).
+# Termux's ps (procps) without flags only shows current-TTY processes.
 
-PREFIX=/data/data/com.termux/files/usr
+PS=/system/bin/ps
 
-# Check gateway is alive first
-if ! ps 2>/dev/null | grep -q "openclaw-gateway"; then
+# Check gateway is alive first (OpenClaw sets process.title = "openclaw-gateway")
+if ! $PS 2>/dev/null | grep -q "openclaw-gateway"; then
   exit 0  # gateway not running, don't kill anything
 fi
 
-# Kill com.termux and com.termux.boot Dalvik VMs
-for PROC in "com.termux$" "com.termux.boot$"; do
-  PID=$(ps 2>/dev/null | grep "$PROC" | grep -v grep | awk '{print $2}')
-  if [ -n "$PID" ]; then
-    kill -9 $PID 2>/dev/null
-  fi
+# Kill com.termux.boot Dalvik only (safe — separate package, ~40 MB)
+# /system/bin/ps format: USER PID PPID VSIZE RSS WCHAN PC NAME
+$PS 2>/dev/null | grep "com.termux.boot$" | grep -v grep | while read _USER PID _REST; do
+  kill -9 $PID 2>/dev/null
 done

@@ -464,7 +464,7 @@ body::after{content:"";position:fixed;inset:0;background:repeating-linear-gradie
 <div class="lz" id="lz"></div>
 </div>
 <div class="sp"></div>
-<div class="ft">V8 128MB &#x2022; NATIVE &#x2022; NO ICU &#x2022; NODE 22</div>
+<div class="ft">V8 180MB &#x2022; NATIVE &#x2022; NODE 22</div>
 </div>
 </div>
 </div>

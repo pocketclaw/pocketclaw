@@ -1740,25 +1740,34 @@ const _LAZY_PKGS = ["@anthropic-ai", "discord.js", "openai", "sharp", ...];
 
 ---
 
-### Hack #50 — kill-dalvik cron (auto-free 20-40 MB after boot)
+### Hack #50 — kill-dalvik cron (auto-free ~40 MB after boot)
 
-**Problem:** After boot, Termux's Dalvik VM (`com.termux` + `com.termux.boot`) consumes 20-40 MB of RAM. Once the gateway is detached via setsid (Hack #49), these VMs serve no purpose but keep consuming memory.
+**Problem:** After boot, Termux's Dalvik VMs (`com.termux` ~49 MB + `com.termux.boot` ~40 MB) consume ~89 MB of RAM. Once the gateway is detached via setsid (Hack #49), these VMs serve no purpose.
 
-**Solution:** A cron job (`kill-dalvik.sh`) that checks if the gateway is running, then kills both Termux Dalvik VMs. Runs every 2 minutes. Safe because it only kills if the gateway is already alive in its detached session.
+**Solution:** A cron job (`kill-dalvik.sh`) that kills `com.termux.boot` Dalvik VM every 2 minutes. Uses `/system/bin/ps` (Termux's procps only shows current-TTY processes, missing Dalvik VMs entirely). Uses shell builtins to parse PIDs (no `awk` in `/system/bin`).
+
+**Critical discovery — Android cgroup cascade kill:** Killing `com.termux` Dalvik triggers Android's ActivityManagerService to kill ALL processes in its cgroup — including the gateway, crond, and all bash processes. The gateway cannot survive this. Only `com.termux.boot` can be safely killed (separate package = separate cgroup). To also kill `com.termux`, must restart gateway from outside (ADB shell) after the kill.
 
 ```bash
-#!/data/data/com.termux/files/usr/bin/bash
+PS=/system/bin/ps
 # Only kill if gateway is running
-if ! ps 2>/dev/null | grep -q "openclaw-gateway"; then exit 0; fi
-for PROC in "com.termux$" "com.termux.boot$"; do
-  PID=$(ps 2>/dev/null | grep "$PROC" | grep -v grep | awk '{print $2}')
-  [ -n "$PID" ] && kill -9 $PID 2>/dev/null
+if ! $PS 2>/dev/null | grep -q "openclaw-gateway"; then exit 0; fi
+# Kill com.termux.boot only (safe — separate package)
+$PS 2>/dev/null | grep "com.termux.boot$" | grep -v grep | while read _USER PID _REST; do
+  kill -9 $PID 2>/dev/null
 done
 ```
 
-**Impact:** -20 to -40 MB RAM after first cron run post-boot. Combined with setsid, achieves **Dalvik-free operation** — gateway runs with zero Java VMs.
+**Lessons learned:**
+1. Termux's `ps` (procps) without flags only shows processes with current TTY — Dalvik VMs and setsid-detached processes are invisible
+2. `/system/bin/ps` shows ALL processes with format: `USER PID PPID VSIZE RSS WCHAN PC NAME`
+3. `awk` doesn't exist in `/system/bin` — use shell builtins (`read`) instead
+4. OpenClaw sets `process.title = "openclaw-gateway"` — grep for this, not `node22`
+5. Windows CRLF line endings break scripts on Android — must `tr -d '\r'` before deploying
 
-**Status: OK — Confirmed 364 MB total (was 384+ with Dalviks alive)**
+**Impact:** -40 MB RAM (com.termux.boot). Additional -49 MB possible via manual ADB kill + restart.
+
+**Status: OK — Confirmed 352 MB total after both Dalviks killed (was 368 with Dalviks)**
 
 ---
 
