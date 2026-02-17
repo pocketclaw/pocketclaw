@@ -446,7 +446,7 @@ body::after{content:"";position:fixed;inset:0;background:repeating-linear-gradie
 <div class="ln">&gt; SYSTEM ONLINE<span class="cur">_</span></div>
 </div>
 <div class="shell">
-<div class="nav"><a href="/dashboard" class="act">STATUS</a><a href="/keys">KEYS</a><a href="/logs">LOGS</a></div>
+<div class="nav"><a href="/dashboard" class="act">STATUS</a><a href="/keys">KEYS</a><a href="/logs">LOGS</a><a href="/control">CTRL</a></div>
 <div class="frame">
 <div class="pad">
 <div class="t">POCKETCLAW</div>
@@ -560,7 +560,7 @@ body::after{content:"";position:fixed;inset:0;background:repeating-linear-gradie
 .ctrl button:active{background:#002a00;border-color:#0f0;color:#0f0}
 .ctrl button.on{border-color:#0f0;color:#0f0}
 </style></head><body>
-<div class="nav"><a href="/dashboard">STATUS</a><a href="/keys">KEYS</a><a href="/logs" class="act">LOGS</a></div>
+<div class="nav"><a href="/dashboard">STATUS</a><a href="/keys">KEYS</a><a href="/logs" class="act">LOGS</a><a href="/control">CTRL</a></div>
 <div class="frame">
 <div class="t">LOGS</div>
 <div class="sub">REAL-TIME GATEWAY OUTPUT</div>
@@ -657,6 +657,14 @@ select option{background:#001a00;color:#0f0}
 <input id="apikey" type="password" placeholder="sk-..." autocomplete="off" spellcheck="false">
 <div class="hint" id="key-hint">Get free key: <b>platform.moonshot.cn</b></div>
 </div>
+<div class="sp"></div>
+<div class="step">
+<div class="step-t"><span>03</span> SYSTEM</div>
+<button class="go" style="background:#001a00;border-color:#0a3a0a;font-size:3vw;color:#073;margin:1vw 0" type="button" onclick="debloat()">DEBLOAT ANDROID (126 packages)</button>
+<button class="go" style="background:#001a00;border-color:#0a3a0a;font-size:3vw;color:#073;margin:1vw 0" type="button" onclick="setHome()">SET HOME SCREEN</button>
+<button class="go" style="background:#001a00;border-color:#0a3a0a;font-size:3vw;color:#073;margin:1vw 0" type="button" onclick="harden()">HARDEN SYSTEM</button>
+<div class="hint" id="sys-msg"></div>
+</div>
 <button class="go" type="submit" id="gobtn">&#x25B6; DEPLOY</button>
 </form>
 <div class="msg" id="msg"></div>
@@ -688,6 +696,16 @@ else{show("Error: "+d.error,"err");document.getElementById("gobtn").disabled=fal
 }).catch(function(e){show("Connection error","err");document.getElementById("gobtn").disabled=false;document.getElementById("gobtn").textContent="\\u25B6 DEPLOY"});
 return false}
 function show(t,c){var m=document.getElementById("msg");m.textContent=t;m.className="msg "+c}
+function sysMsg(t){document.getElementById("sys-msg").textContent=t}
+function debloat(){sysMsg("Debloating...");
+fetch("/api/setup/debloat",{method:"POST"}).then(function(r){return r.json()}).then(function(d){
+sysMsg("Done: "+d.done+"/"+d.total+" disabled")}).catch(function(){sysMsg("Error")})}
+function setHome(){
+fetch("/api/setup/launcher",{method:"POST"}).then(function(r){return r.json()}).then(function(d){
+sysMsg(d.ok?"PocketClaw set as home":"Error")}).catch(function(){sysMsg("Error")})}
+function harden(){
+fetch("/api/setup/harden",{method:"POST"}).then(function(r){return r.json()}).then(function(d){
+sysMsg("Applied "+d.applied+"/"+d.total+" settings")}).catch(function(){sysMsg("Error")})}
 </script></body></html>`;
 
 // --- Keys Management Page ---
@@ -735,7 +753,7 @@ body::after{content:"";position:fixed;inset:0;background:repeating-linear-gradie
 .add-row input{flex:1;background:#001a00;border:1px solid #0a3a0a;color:#0f0;font-family:monospace;font-size:2.6vw;padding:1.5vw;border-radius:3px;outline:none}
 .ft{text-align:center;font-size:1.6vw;color:#082a08;padding:8px 0;letter-spacing:.2em}
 </style></head><body>
-<div class="nav"><a href="/dashboard">STATUS</a><a href="/keys" class="act">KEYS</a><a href="/logs">LOGS</a></div>
+<div class="nav"><a href="/dashboard">STATUS</a><a href="/keys" class="act">KEYS</a><a href="/logs">LOGS</a><a href="/control">CTRL</a></div>
 <div class="frame"><div class="pad">
 <div class="t">API KEYS</div>
 <div class="sub">MANAGE YOUR CREDENTIALS</div>
@@ -1017,6 +1035,305 @@ function _handleKeyTest(req, res) {
   r.on("timeout", function() { r.destroy(); });
 }
 
+// --- Server mode + Control state ---
+let _serverMode = false;
+let _serverModeStarted = 0;
+
+// --- Debloat package list (126 packages from restore-debloat.sh) ---
+const _DEBLOAT_PKGS = [
+  "com.google.android.apps.docs","com.google.android.apps.docs.editors.docs",
+  "com.google.android.apps.inputmethod.hindi","com.google.android.apps.magazines",
+  "com.google.android.apps.maps","com.google.android.apps.photos",
+  "com.google.android.apps.plus","com.google.android.gm",
+  "com.google.android.gms","com.google.android.googlequicksearchbox",
+  "com.google.android.gsf","com.google.android.gsf.login",
+  "com.google.android.inputmethod.latin","com.google.android.music",
+  "com.google.android.talk","com.google.android.tts",
+  "com.google.android.videos","com.google.android.youtube",
+  "com.google.android.apps.books","com.google.android.apps.cloudprint",
+  "com.google.android.backuptransport","com.google.android.calendar",
+  "com.google.android.configupdater","com.google.android.deskclock",
+  "com.google.android.feedback","com.google.android.gallery3d",
+  "com.google.android.gm.exchange","com.google.android.inputmethod.korean",
+  "com.google.android.inputmethod.pinyin","com.google.android.launcher",
+  "com.google.android.marvin.talkback","com.google.android.onetimeinitializer",
+  "com.google.android.partnersetup","com.google.android.play.games",
+  "com.google.android.setupwizard","com.google.android.syncadapters.contacts",
+  "com.lmi.motorola.rescuesecurity","com.motorola.actions",
+  "com.motorola.android.fmradio","com.motorola.android.jvtcmd",
+  "com.motorola.android.nativedropboxagent","com.motorola.android.provisioning",
+  "com.motorola.android.settings.diag_mdlog","com.motorola.android.settings.modemdebug",
+  "com.motorola.appdirectedsmsproxy","com.motorola.audioeffects",
+  "com.motorola.bach.modemstats","com.motorola.bodyguard",
+  "com.motorola.bug2go","com.motorola.camera",
+  "com.motorola.ccc.checkin","com.motorola.ccc.devicemanagement",
+  "com.motorola.ccc.mainplm","com.motorola.ccc.notification",
+  "com.motorola.ccc.ota","com.motorola.contacts.preloadcontacts",
+  "com.motorola.context","com.motorola.coresettingsext",
+  "com.motorola.demo","com.motorola.emaraphoneextns",
+  "com.motorola.fmplayer","com.motorola.genie",
+  "com.motorola.groundloopnoisepreventer","com.motorola.launcherconfig",
+  "com.motorola.moodles","com.motorola.MotGallery2",
+  "com.motorola.motgeofencesvc","com.motorola.moto",
+  "com.motorola.motocare","com.motorola.motocare.internal",
+  "com.motorola.motocit","com.motorola.motodisplay",
+  "com.motorola.motodisplay.env","com.motorola.onetimeinitializer",
+  "com.motorola.sensorhub.stml0.updater","com.motorola.setup",
+  "com.motorola.slpc","com.motorola.storageoptimizer",
+  "com.motorola.wappushsi",
+  "com.android.cellbroadcastreceiver","com.android.chrome",
+  "com.android.documentsui","com.android.mms",
+  "com.android.providers.calendar","com.android.vending",
+  "com.android.backupconfirm","com.android.bluetooth",
+  "com.android.bluetoothmidiservice","com.android.bookmarkprovider",
+  "com.android.calculator2","com.android.captiveportallogin",
+  "com.android.carrierconfig","com.android.certinstaller",
+  "com.android.contacts","com.android.dialer",
+  "com.android.dreams.basic","com.android.facelock",
+  "com.android.htmlviewer","com.android.location.fused",
+  "com.android.managedprovisioning","com.android.mms.service",
+  "com.android.pacprocessor","com.android.printspooler",
+  "com.android.providers.calllogbackup","com.android.providers.contacts",
+  "com.android.providers.partnerbookmarks","com.android.providers.userdictionary",
+  "com.android.proxyhandler","com.android.sharedstoragebackup",
+  "com.android.statementservice","com.android.stk",
+  "com.android.vpndialogs","com.android.wallpaper.livepicker",
+  "com.android.wallpapercropper",
+  "com.qualcomm.atfwd","com.qualcomm.location","com.qualcomm.timeservice",
+  "com.android.phone","com.android.server.telecom",
+  "com.android.providers.telephony","com.qualcomm.qcrilmsgtunnel",
+  "com.motorola.android.dm.service","com.motorola.slpc_sys",
+  "com.android.systemui"
+];
+
+// --- Control API handlers ---
+function _handleControl(req, res) {
+  const mem = process.memoryUsage();
+  const data = {
+    serverMode: _serverMode,
+    serverModeUptime: _serverMode ? Math.round((Date.now() - _serverModeStarted) / 1000) : 0,
+    gatewayPid: process.pid,
+    rss: Math.round(mem.rss / 1048576),
+    heap: Math.round(mem.heapUsed / 1048576),
+    heapLimit: Math.round(require("v8").getHeapStatistics().heap_size_limit / 1048576)
+  };
+  res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+  res.end(JSON.stringify(data));
+}
+
+function _handleServerMode(req, res) {
+  let body = "";
+  req.on("data", function(c) { body += c; });
+  req.on("end", function() {
+    try {
+      const d = JSON.parse(body);
+      _serverMode = !!d.enabled;
+      if (_serverMode) {
+        _serverModeStarted = Date.now();
+        if (typeof global.gc === "function") global.gc();
+        console.log("[hijack] Server mode ON — GC forced");
+      } else {
+        _serverModeStarted = 0;
+        console.log("[hijack] Server mode OFF");
+      }
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ ok: true, serverMode: _serverMode }));
+    } catch (e) {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ ok: false, error: e.message }));
+    }
+  });
+}
+
+function _handleReboot(req, res) {
+  res.writeHead(200, { "Content-Type": "application/json" });
+  res.end(JSON.stringify({ ok: true, message: "Rebooting in 3s" }));
+  console.log("[hijack] Reboot requested — shutting down in 3s");
+  setTimeout(function() {
+    try {
+      require("child_process").execSync("reboot", { timeout: 5000 });
+    } catch (e) {
+      try { require("child_process").execSync("su -c reboot", { timeout: 5000 }); }
+      catch (e2) { console.error("[hijack] Reboot failed: " + e2.message); }
+    }
+  }, 3000);
+}
+
+function _handleGC(req, res) {
+  if (typeof global.gc === "function") {
+    const before = process.memoryUsage().heapUsed;
+    global.gc();
+    const after = process.memoryUsage().heapUsed;
+    const freed = Math.round((before - after) / 1048576);
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ ok: true, freedMB: freed, heapMB: Math.round(after / 1048576) }));
+  } else {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ ok: false, error: "GC not exposed (need --expose-gc)" }));
+  }
+}
+
+function _handleDebloat(req, res) {
+  res.writeHead(200, { "Content-Type": "application/json", "Transfer-Encoding": "chunked" });
+  const cp = require("child_process");
+  let done = 0, failed = 0, errors = [];
+  function next(i) {
+    if (i >= _DEBLOAT_PKGS.length) {
+      res.end(JSON.stringify({ ok: true, total: _DEBLOAT_PKGS.length, done: done, failed: failed, errors: errors.slice(0, 10) }));
+      return;
+    }
+    const pkg = _DEBLOAT_PKGS[i];
+    try {
+      cp.execSync("pm disable-user --user 0 " + pkg, { timeout: 5000 });
+      done++;
+    } catch (e) {
+      try {
+        cp.execSync("pm uninstall -k --user 0 " + pkg, { timeout: 5000 });
+        done++;
+      } catch (e2) {
+        failed++;
+        errors.push(pkg);
+      }
+    }
+    // Yield to event loop every 10 packages
+    if (i % 10 === 0) setTimeout(function() { next(i + 1); }, 0);
+    else next(i + 1);
+  }
+  console.log("[hijack] Debloat starting — " + _DEBLOAT_PKGS.length + " packages");
+  next(0);
+}
+
+function _handleSetLauncher(req, res) {
+  const cp = require("child_process");
+  try {
+    // Disable stock launchers
+    try { cp.execSync("pm disable-user --user 0 com.google.android.launcher", { timeout: 5000 }); } catch (e) {}
+    try { cp.execSync("pm disable-user --user 0 com.motorola.launcherconfig", { timeout: 5000 }); } catch (e) {}
+    console.log("[hijack] Stock launchers disabled — PocketClaw is default");
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ ok: true }));
+  } catch (e) {
+    res.writeHead(500, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ ok: false, error: e.message }));
+  }
+}
+
+function _handleHarden(req, res) {
+  const cp = require("child_process");
+  const cmds = [
+    "settings put global window_animation_scale 0",
+    "settings put global transition_animation_scale 0",
+    "settings put global animator_duration_scale 0",
+    "settings put system screen_brightness 0",
+    "settings put system screen_off_timeout 15000",
+    "settings put global wifi_sleep_policy 2"
+  ];
+  let ok = 0;
+  cmds.forEach(function(cmd) {
+    try { cp.execSync(cmd, { timeout: 5000 }); ok++; } catch (e) {}
+  });
+  console.log("[hijack] System hardened — " + ok + "/" + cmds.length + " settings applied");
+  res.writeHead(200, { "Content-Type": "application/json" });
+  res.end(JSON.stringify({ ok: true, applied: ok, total: cmds.length }));
+}
+
+// --- CTRL Web Page HTML ---
+const _CTRL = `<!DOCTYPE html><html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="theme-color" content="#000a00">
+<title>PocketClaw Control</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#000a00;color:#0f0;font-family:'Courier New',monospace;min-height:100vh;-webkit-user-select:none}
+body::before{content:"";position:fixed;inset:0;background:radial-gradient(ellipse at center,transparent 40%,rgba(0,10,0,.7));pointer-events:none;z-index:90}
+body::after{content:"";position:fixed;inset:0;background:repeating-linear-gradient(0deg,rgba(0,0,0,.1) 0px,rgba(0,0,0,.1) 1px,transparent 1px,transparent 3px);pointer-events:none;z-index:91}
+.nav{display:flex;padding:4px 6px 0;gap:4px;position:relative;z-index:10}
+.nav a{flex:1;text-align:center;padding:1.8vw 0;font-size:2.6vw;text-decoration:none;letter-spacing:.2em;border:1px solid #0a3a0a;border-bottom:none;border-radius:4px 4px 0 0;color:#073;background:#000a00;transition:all .2s}
+.nav a.act{color:#0f0;background:#001a00;border-color:rgba(0,255,65,.2);text-shadow:0 0 6px rgba(0,255,65,.4)}
+.frame{margin:0 6px 6px;border:1px solid rgba(0,255,65,.12);border-radius:0 0 5px 5px;box-shadow:0 0 25px rgba(0,255,65,.04),inset 0 0 50px rgba(0,0,0,.5);min-height:85vh;padding:12px 14px}
+.t{text-align:center;font-size:4.5vw;letter-spacing:.5em;color:#0f0;margin:6px 0 2px;text-shadow:0 0 10px rgba(0,255,65,.5)}
+.sub{text-align:center;font-size:2vw;color:#1a3a1a;margin-bottom:10px;letter-spacing:.2em}
+.sec{font-size:1.8vw;color:#0a3a0a;letter-spacing:.4em;margin:12px 0 6px 4px}
+.row{display:flex;align-items:center;padding:2vw 0;font-size:3vw}
+.row .lbl{width:30vw;color:#073}.row .val{flex:1;color:#0f0;text-align:right}
+.btn{display:block;width:100%;background:#001a00;border:2px solid #0a3a0a;color:#073;font-family:'Courier New',monospace;font-size:3.5vw;padding:3vw;border-radius:4px;cursor:pointer;letter-spacing:.2em;margin:2vw 0;transition:all .2s;text-align:center}
+.btn:active{background:#002a00;border-color:#0f0;color:#0f0}
+.btn.on{border-color:#0f0;color:#0f0;background:#002a00}
+.btn.danger{border-color:#522;color:#e33}
+.btn.danger:active{background:#200;border-color:#f66}
+.stat{font-size:2.4vw;color:#073;padding:1vw 0}
+.stat span{color:#0a0}
+.sp{border-top:1px solid rgba(0,255,65,.06);margin:3vw 0}
+.msg{text-align:center;padding:2vw;font-size:2.8vw;min-height:4vw;color:#0f0}
+</style></head><body>
+<div class="nav"><a href="/dashboard">STATUS</a><a href="/keys">KEYS</a><a href="/logs">LOGS</a><a href="/control" class="act">CTRL</a></div>
+<div class="frame">
+<div class="t">CONTROL</div>
+<div class="sub">GATEWAY MANAGEMENT</div>
+<div class="sec">SERVER</div>
+<div class="row"><span class="lbl">PID</span><span class="val" id="pid">...</span></div>
+<div class="row"><span class="lbl">RSS</span><span class="val" id="rss">...</span></div>
+<div class="row"><span class="lbl">Heap</span><span class="val" id="heap">...</span></div>
+<div class="row"><span class="lbl">Heap Limit</span><span class="val" id="hlimit">...</span></div>
+<div class="sp"></div>
+<div class="sec">ACTIONS</div>
+<button class="btn" id="sm" onclick="toggleServer()">SERVER MODE: OFF</button>
+<button class="btn" onclick="doGC()">FORCE GC</button>
+<button class="btn danger" onclick="doReboot()">REBOOT DEVICE</button>
+<div class="sp"></div>
+<div class="sec">SETUP</div>
+<button class="btn" onclick="doDebloat()">DEBLOAT ANDROID (126 pkgs)</button>
+<button class="btn" onclick="doLauncher()">SET HOME SCREEN</button>
+<button class="btn" onclick="doHarden()">HARDEN SYSTEM</button>
+<div class="sp"></div>
+<div class="msg" id="msg"></div>
+</div>
+<script>
+function poll(){
+fetch("/api/control").then(function(r){return r.json()}).then(function(d){
+document.getElementById("pid").textContent=d.gatewayPid;
+document.getElementById("rss").textContent=d.rss+" MB";
+document.getElementById("heap").textContent=d.heap+" MB";
+document.getElementById("hlimit").textContent=d.heapLimit+" MB";
+var btn=document.getElementById("sm");
+btn.textContent="SERVER MODE: "+(d.serverMode?"ON":"OFF");
+btn.className="btn"+(d.serverMode?" on":"");
+}).catch(function(){})}
+function toggleServer(){
+fetch("/api/control").then(function(r){return r.json()}).then(function(d){
+fetch("/api/control/server-mode",{method:"POST",headers:{"Content-Type":"application/json"},
+body:JSON.stringify({enabled:!d.serverMode})}).then(function(){poll()})
+})}
+function doGC(){
+fetch("/api/control/gc",{method:"POST"}).then(function(r){return r.json()}).then(function(d){
+msg(d.ok?"GC freed "+d.freedMB+" MB":"GC: "+d.error);poll()}).catch(function(){msg("Error")})}
+function doReboot(){
+if(!confirm("Reboot device?"))return;
+fetch("/api/control/reboot",{method:"POST"}).then(function(){msg("Rebooting in 3s...")})}
+function doDebloat(){
+if(!confirm("Disable 126 packages?"))return;
+msg("Debloating...");
+fetch("/api/setup/debloat",{method:"POST"}).then(function(r){return r.json()}).then(function(d){
+msg("Done: "+d.done+"/"+d.total+" disabled, "+d.failed+" failed")}).catch(function(){msg("Error")})}
+function doLauncher(){
+fetch("/api/setup/launcher",{method:"POST"}).then(function(r){return r.json()}).then(function(d){
+msg(d.ok?"PocketClaw set as home":"Error: "+d.error)}).catch(function(){msg("Error")})}
+function doHarden(){
+fetch("/api/setup/harden",{method:"POST"}).then(function(r){return r.json()}).then(function(d){
+msg("Applied "+d.applied+"/"+d.total+" settings")}).catch(function(){msg("Error")})}
+function msg(t){document.getElementById("msg").textContent=t;setTimeout(function(){document.getElementById("msg").textContent=""},5000)}
+poll();setInterval(poll,5000);
+</script></body></html>`;
+
+// Add serverMode to _getStatus response
+var _origGetStatus = _getStatus;
+_getStatus = function() {
+  var s = _origGetStatus();
+  s.serverMode = _serverMode;
+  return s;
+};
+
 // --- Intercept HTTP server ---
 const _origListen = _http.Server.prototype.listen;
 _http.Server.prototype.listen = function () {
@@ -1118,10 +1435,44 @@ _http.Server.prototype.listen = function () {
           res.end(JSON.stringify(_getStatus()));
           return true;
         }
+        // --- v3.0 Control endpoints ---
+        if (req.url === "/control") {
+          res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+          res.end(_CTRL);
+          return true;
+        }
+        if (req.url === "/api/control" && req.method === "GET") {
+          _handleControl(req, res);
+          return true;
+        }
+        if (req.url === "/api/control/server-mode" && req.method === "POST") {
+          _handleServerMode(req, res);
+          return true;
+        }
+        if (req.url === "/api/control/reboot" && req.method === "POST") {
+          _handleReboot(req, res);
+          return true;
+        }
+        if (req.url === "/api/control/gc" && req.method === "POST") {
+          _handleGC(req, res);
+          return true;
+        }
+        if (req.url === "/api/setup/debloat" && req.method === "POST") {
+          _handleDebloat(req, res);
+          return true;
+        }
+        if (req.url === "/api/setup/launcher" && req.method === "POST") {
+          _handleSetLauncher(req, res);
+          return true;
+        }
+        if (req.url === "/api/setup/harden" && req.method === "POST") {
+          _handleHarden(req, res);
+          return true;
+        }
       }
     }
     return origEmit.apply(this, arguments);
   };
-  console.log("[hijack] Dashboard on :" + (arguments[0] || "?") + " | Setup: /setup");
+  console.log("[hijack] Dashboard on :" + (arguments[0] || "?") + " | Setup: /setup | CTRL: /control");
   return _origListen.apply(this, arguments);
 };

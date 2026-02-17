@@ -1,7 +1,10 @@
 package com.pocketclaw.launcher;
 
 import android.app.Service;
+import android.content.BroadcastReceiver;
+import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.graphics.PixelFormat;
 import android.graphics.Typeface;
 import android.os.IBinder;
@@ -14,6 +17,7 @@ import android.widget.TextView;
 public class FloatingCrabService extends Service {
     private WindowManager wm;
     private TextView crabBtn;
+    private BroadcastReceiver serverModeReceiver;
 
     @Override
     public IBinder onBind(Intent intent) { return null; }
@@ -84,11 +88,22 @@ public class FloatingCrabService extends Service {
         });
 
         wm.addView(crabBtn, params);
+
+        // Listen for server mode toggle to hide/show
+        serverModeReceiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                boolean hide = intent.getBooleanExtra("hide", false);
+                crabBtn.setVisibility(hide ? View.GONE : View.VISIBLE);
+            }
+        };
+        registerReceiver(serverModeReceiver, new IntentFilter("com.pocketclaw.CRAB_VISIBILITY"));
     }
 
     @Override
     public void onDestroy() {
         super.onDestroy();
         if (crabBtn != null) wm.removeView(crabBtn);
+        if (serverModeReceiver != null) unregisterReceiver(serverModeReceiver);
     }
 }
