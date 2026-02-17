@@ -23,7 +23,7 @@
 
 **They said it couldn't be done. 53 hacks later, it's running.**
 
-[Setup Guide](#-setup-guide) · [The 53 Hacks](HACKS.md) · [Troubleshooting](#-troubleshooting) · [Contributing](CONTRIBUTING.md)
+[Setup Guide](#-setup-guide) · [Desktop App](#-desktop-app) · [The 53 Hacks](HACKS.md) · [Troubleshooting](#-troubleshooting) · [Contributing](CONTRIBUTING.md)
 
 </div>
 
@@ -455,6 +455,36 @@ The `start-openclaw` script includes a **watchdog loop**: if the gateway dies (n
 
 ---
 
+## 💻 Desktop App
+
+**PocketClaw 3000 Desktop** — a Pip-Boy style Electron app to setup, monitor, and manage your PocketClaw devices from your computer.
+
+### One-Click Setup
+Plug the phone via USB, enter your API keys, hit START. The app handles all 8 setup steps automatically (~20 min).
+
+### Live Dashboard
+Monitor RAM, disk, battery, gateway status, and stream live logs — all from your desktop.
+
+### Features
+- **5 tabs** — STAT (dashboard), DEVICES (fleet), KEYS (API keys), SETUP (installer), TOOLS (remote commands + shell)
+- **CRT aesthetic** — scanlines, vignette, scan beam, 5 color themes (green, amber, blue, white, pink)
+- **8 crustacean avatars** — animated ASCII art, syncs to mobile dashboard
+- **USB + Network modes** — connect via ADB or HTTP gateway URL
+- **Auto-reconnect** — reconnects automatically on connection drop
+- **Interactive ADB shell** — run commands on the phone from the Tools tab
+- **Device persistence** — saved across app restarts
+
+### Quick Start
+```bash
+cd desktop
+npm install
+npm start
+```
+
+See [`desktop/README.md`](desktop/README.md) for full documentation.
+
+---
+
 ## 🧠 Pick Your AI
 
 OpenClaw works with **30+ providers** out of the box. Just change the provider, model name, and API key in `openclaw.json`. Model format is always `provider/model-name`.
@@ -606,7 +636,8 @@ adb shell monkey -p com.termux.boot -c android.intent.category.LAUNCHER 1
 ```
 pocketclaw/
 ├── README.md                      # You are here
-├── HACKS.md                       # The 48 hacks — the full war story
+├── HACKS.md                       # The 53 hacks — the full war story
+├── desktop/                       # Electron desktop app (setup + dashboard)
 ├── CONTRIBUTING.md                 # How to contribute
 ├── LICENSE                         # MIT
 ├── restore-debloat.sh             # One-script debloat (126 packages + tuning)
