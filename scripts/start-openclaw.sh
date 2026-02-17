@@ -43,12 +43,9 @@ while true; do
   mkdir -p "$NODE_COMPILE_CACHE" 2>/dev/null
   export ANDROID_DATA=/data
   export ANDROID_ROOT=/system
-  # Dynamic heap: 180 MB during boot (Dalviks alive, tight RAM), 128 MB after (Dalviks dead)
-  if /system/bin/ps 2>/dev/null | grep -q "com.termux.boot$"; then
-    HEAP=180
-  else
-    HEAP=150
-  fi
+  # Heap 150 MB — can't go lower (old space uses ~133 MB steady state, 140 OOMs after ~1h)
+  # --initial-old-space-size=32 crashes node22-icu (unsupported flag)
+  HEAP=150
   export NODE_OPTIONS="-r $HIJACK --expose-gc --no-warnings --max-old-space-size=$HEAP --max-semi-space-size=1"
   echo "[$(date)] V8 heap: ${HEAP}MB"
 

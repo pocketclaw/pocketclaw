@@ -1843,6 +1843,117 @@ Keys are stored in `~/.openclaw/env` with mode 0600. The test endpoint uses HTTP
 
 ---
 
+### Hack #54 — Dead packages (_DEAD_PKGS instant stubs)
+
+**Problem:** Lazy loading (Hack #48) defers module loading until first use — but the module is still fully loaded when accessed. For providers/channels that will NEVER be used on this device (Anthropic, Google, AWS, Discord, Slack, WhatsApp, etc.), even deferred loading is wasteful.
+
+**Solution:** Split the lazy list into two categories:
+- `_DEAD_PKGS` — returns `_deadStub` immediately, never loads the real module (0 MB)
+- `_LAZY_PKGS` — defers loading until first property access (loads on demand)
+
+```javascript
+const _DEAD_PKGS = [
+  "@anthropic-ai",     // Claude — not used
+  "@google",           // Google GenAI — not used
+  "@aws-sdk", "@aws-crypto", "@aws", "@smithy",  // AWS Bedrock
+  "cohere-ai", "@mistralai", "@huggingface", "@cloudflare",
+  "discord.js", "@discordjs", "@buape/carbon",  // Discord
+  "@slack", "@line", "@whiskeysockets", "libsignal", "@larksuiteoapi",
+];
+```
+
+The `_matchPkgList()` helper unifies prefix matching for both lists. Dead count is tracked and shown on the dashboard (`dead: 23`).
+
+**Impact:** 23 packages instantly stubbed. ~9 MB RAM saved vs lazy loading them.
+
+**Status: OK — 23 dead, 6 deferred, 8 loaded on demand**
+
+---
+
+### Hack #55 — termux-wake-lock + Doze bypass (sleep mode)
+
+**Problem:** When the phone screen turns off, Android 6's Doze mode suspends the CPU after ~30 min of inactivity. The gateway stops processing — Telegram messages queue up for hours, only handled during brief maintenance windows every 2-3 hours.
+
+**Discovery:** GC logs prove it — overnight gaps of 2-3 hours between GC cycles:
+```
+22:22 GC freed 16 MB
+00:00 GC freed 18 MB   ← 1h38 gap (Doze)
+02:57 GC freed 15 MB   ← 3h gap
+05:23 GC freed 18 MB   ← 2.5h gap
+```
+
+**Solution (dual-layer):**
+1. `termux-wake-lock` in boot script — acquires Android `PARTIAL_WAKE_LOCK` (CPU on, screen off)
+2. `adb shell dumpsys deviceidle whitelist +com.termux` — exempts Termux from Doze (persists across reboot)
+3. `adb shell dumpsys deviceidle disable` — disables Doze entirely (must re-run after reboot, only works from ADB shell UID 2000)
+
+**Constraint:** `termux-wake-lock` starts Termux's foreground service via `am startservice`. This requires `com.termux` Dalvik VM alive (48 MB). Killing it releases the wake lock AND cascade-kills the gateway via cgroup. The 48 MB is the unavoidable cost of sleep-mode support.
+
+**Why not kernel wake lock?** Writing to `/sys/power/wake_lock` requires root. Could be done via Dirty COW but adds complexity.
+
+**Why not just `deviceidle disable`?** Only works from ADB shell (UID 2000), fails from Termux (UID 10096, needs `android.permission.DUMP`). Does not persist across reboot.
+
+```bash
+# In start-pocketclaw.sh (runs at boot via Termux:Boot)
+termux-wake-lock 2>/dev/null && log "Wake lock acquired"
+```
+
+**Impact:** Gateway responds to Telegram messages in real-time 24/7, even with screen off.
+
+**Status: OK — Confirmed: GC fires every 30s in sleep mode (was every 2-3h without wake lock)**
+
+---
+
+### Hack #56 — Merged kill loop (3 bash → 1 bash)
+
+**Problem:** The boot script spawned 3 separate `while true` loops for background kills: SystemUI killer (every 60s), dormant service killer (every 5 min), and the old monitor script. Each bash process = ~1.5 MB RSS.
+
+**Solution:** Merged all background kills into a single loop running every 5 minutes. Monitor script removed entirely (dashboard shows live stats). SystemUI killer interval relaxed from 60s to 300s (it respawns slowly anyway).
+
+```bash
+# Single merged kill loop (was 3 separate loops)
+(while true; do
+  sleep 300
+  for PKG in com.android.systemui com.android.settings com.android.keychain \
+    com.android.externalstorage com.android.defcontainer \
+    com.android.location.fused com.motorola.ccc.devicemanagement; do
+    am force-stop "$PKG" 2>/dev/null
+  done
+done) &
+```
+
+Also expanded the force-stop list from 9 to 12 packages (added `com.android.location.fused`, `com.motorola.ccc.devicemanagement`, `com.android.defcontainer`).
+
+**Impact:** -3 MB RAM (2 fewer bash processes), fewer fork/exec cycles.
+
+**Status: OK**
+
+---
+
+### Hack #57 — V8 semi-space 2→1 MB (safe heap reduction)
+
+**Problem:** V8's young generation (semi-space) defaults to 2 MB. For an I/O-bound gateway that barely allocates short-lived objects, this is wasted memory. Reducing the old-space heap is dangerous (128 MB OOMs instantly, 140 MB OOMs after ~1 hour), but semi-space can be halved safely.
+
+**What was tested:**
+| Setting | Result |
+|---------|--------|
+| `--max-old-space-size=128` | Instant OOM at startup (old space needs ~133 MB for module loading) |
+| `--max-old-space-size=140` | Boots fine, V8 abort (SIGABRT/exit 134) after ~1 hour |
+| `--initial-old-space-size=32` | Crashes node22-icu immediately (exit 9 — unsupported flag) |
+| `--max-old-space-size=150 --max-semi-space-size=1` | **Stable** — 11h+ uptime, no OOM |
+
+**Solution:** Keep `--max-old-space-size=150` (minimum viable), reduce `--max-semi-space-size=2` → `1`:
+
+```bash
+export NODE_OPTIONS="-r $HIJACK --expose-gc --no-warnings --max-old-space-size=150 --max-semi-space-size=1"
+```
+
+**Impact:** Gateway RSS dropped from 216 MB to 180 MB (-36 MB). Total system RAM: 346 MB (was 380 MB). The 150 MB old-space floor is the absolute minimum — V8 uses ~133 MB steady state, leaving only 17 MB headroom for spikes during message processing and lazy module loading.
+
+**Status: OK — Stable at 346 MB total, 180 MB gateway RSS**
+
+---
+
 *"On m'a dit que c'était impossible, alors je l'ai fait." — Probablement pas Einstein, mais on s'en fout.*
 
-*Total : ~18 heures. 53 hacks. 0 EUR de hardware. Un Moto E2 de 2015 transforme en PocketClaw OS : agent IA autonome, dashboard CRT 3 pages, setup wizard web, boot autonome sans Dalvik, headless server mode avec Android a 290 MB. Un brick. Un factory reset. Des lecons. De PoC a produit installable.*
+*Total : ~22 heures. 57 hacks. 0 EUR de hardware. Un Moto E2 de 2015 transforme en PocketClaw OS : agent IA autonome, dashboard CRT 3 pages, setup wizard web, boot autonome, wake lock, headless server mode. Un brick. Un factory reset. Des lecons. De PoC a produit installable.*

@@ -56,7 +56,12 @@ fi
 
 # monitor removed — dashboard shows live stats, CSV logging unnecessary
 
-# Start the gateway in a NEW SESSION (setsid) so it survives Dalvik kill
+# Wake lock: keeps CPU on + WiFi alive while screen is off.
+# Requires com.termux Dalvik alive (48 MB cost — can't kill it, cgroup cascades).
+# Also run "adb shell dumpsys deviceidle disable" for belt-and-suspenders Doze bypass.
+termux-wake-lock 2>/dev/null && log "Wake lock acquired" || log "WARNING: wake lock failed"
+
+# Start the gateway in a NEW SESSION (setsid) so it survives com.termux.boot kill
 /system/bin/setsid start-openclaw > "$PREFIX/tmp/openclaw-gateway.log" 2>&1 &
 log "Gateway started in detached session (PID $!)"
 
