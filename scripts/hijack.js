@@ -57,30 +57,56 @@ const _Module = require("module");
 const _origRequire = _Module.prototype.require;
 const _origLoad = _Module._load;
 
-// Dead packages — return _deadStub immediately, never load the real module.
-// These are providers/channels not used on this device. Saves ~9 MB RAM.
-// Move back to _LAZY_PKGS if you want to enable them.
-const _DEAD_PKGS = [
-  // --- Unused AI providers (no API keys configured) ---
-  "@anthropic-ai",     // Claude — not used (Kimi is primary)
-  "@google",           // Google GenAI — not used
-  "@aws-sdk", "@aws-crypto", "@aws", "@smithy",  // AWS Bedrock — not used
-  "cohere-ai", "@mistralai",
-  "@huggingface",
-  "@cloudflare",
-  // --- Unused channel SDKs ---
-  "discord.js", "@discordjs", "@buape/carbon",  // Discord — not used
-  "@slack",            // Slack — not used
-  "@line",             // Line — not used
-  "@whiskeysockets", "libsignal",  // WhatsApp — not used
-  "@larksuiteoapi",    // Lark — not used
+// Module registry — ALL OpenClaw providers and channels with metadata.
+// Status per module: "active" (always loaded), "lazy" (deferred), "dead" (stubbed).
+// User overrides stored in modules.json survive restarts.
+const _MODULES_FILE = "/sdcard/pocketclaw/modules.json";
+const _ALL_MODULES = [
+  // AI Providers
+  { id:"openai",     name:"OpenAI",       type:"provider", key:"OPENAI_API_KEY",     pkgs:["openai"],                                    ram:4, def:"lazy" },
+  { id:"anthropic",  name:"Anthropic",    type:"provider", key:"ANTHROPIC_API_KEY",  pkgs:["@anthropic-ai"],                             ram:3, def:"dead" },
+  { id:"google",     name:"Google Gemini",type:"provider", key:"GEMINI_API_KEY",     pkgs:["@google"],                                   ram:5, def:"dead" },
+  { id:"mistral",    name:"Mistral",      type:"provider", key:"MISTRAL_API_KEY",    pkgs:["@mistralai"],                                ram:2, def:"dead" },
+  { id:"cohere",     name:"Cohere",       type:"provider", key:"COHERE_API_KEY",     pkgs:["cohere-ai"],                                 ram:2, def:"dead" },
+  { id:"aws",        name:"AWS Bedrock",  type:"provider", key:"AWS_ACCESS_KEY_ID",  pkgs:["@aws-sdk","@aws-crypto","@aws","@smithy"],   ram:8, def:"dead" },
+  { id:"huggingface",name:"HuggingFace",  type:"provider", key:"HF_TOKEN",           pkgs:["@huggingface"],                              ram:2, def:"dead" },
+  { id:"cloudflare", name:"Cloudflare",   type:"provider", key:"CF_API_TOKEN",       pkgs:["@cloudflare"],                               ram:2, def:"dead" },
+  { id:"groq",       name:"Groq",         type:"provider", key:"GROQ_API_KEY",       pkgs:[],                                            ram:0, def:"lazy" },
+  { id:"xai",        name:"xAI (Grok)",   type:"provider", key:"XAI_API_KEY",        pkgs:[],                                            ram:0, def:"lazy" },
+  { id:"cerebras",   name:"Cerebras",     type:"provider", key:"CEREBRAS_API_KEY",   pkgs:[],                                            ram:0, def:"lazy" },
+  { id:"openrouter", name:"OpenRouter",   type:"provider", key:"OPENROUTER_API_KEY", pkgs:[],                                            ram:0, def:"lazy" },
+  // Channels
+  { id:"telegram",   name:"Telegram",     type:"channel",  key:"TELEGRAM_BOT_TOKEN", pkgs:[],                                            ram:0, def:"active" },
+  { id:"discord",    name:"Discord",      type:"channel",  key:"DISCORD_BOT_TOKEN",  pkgs:["discord.js","@discordjs","@buape/carbon"],   ram:8, def:"dead" },
+  { id:"whatsapp",   name:"WhatsApp",     type:"channel",  key:null,                 pkgs:["@whiskeysockets","libsignal"],                ram:12,def:"dead" },
+  { id:"slack",      name:"Slack",        type:"channel",  key:"SLACK_BOT_TOKEN",    pkgs:["@slack"],                                    ram:4, def:"dead" },
+  { id:"line",       name:"LINE",         type:"channel",  key:"LINE_CHANNEL_TOKEN", pkgs:["@line"],                                     ram:3, def:"dead" },
+  { id:"lark",       name:"Lark/Feishu",  type:"channel",  key:"LARK_APP_ID",        pkgs:["@larksuiteoapi"],                            ram:3, def:"dead" },
 ];
+
+// Read user overrides (dead↔lazy) from modules.json
+let _moduleOverrides = {};
+try {
+  _moduleOverrides = JSON.parse(_fs0.readFileSync(_MODULES_FILE, "utf8"));
+} catch(e) {}
+
+// Compute _DEAD_PKGS and _LAZY_PKGS from registry + overrides
+let _restartNeeded = false;
+function _getModuleStatus(m) {
+  if (_moduleOverrides[m.id] !== undefined) return _moduleOverrides[m.id];
+  return m.def;
+}
+const _DEAD_PKGS = [];
+const _LAZY_PKGS_FROM_MODULES = [];
+_ALL_MODULES.forEach(function(m) {
+  var st = _getModuleStatus(m);
+  if (st === "dead") m.pkgs.forEach(function(p) { _DEAD_PKGS.push(p); });
+  else if (st === "lazy") m.pkgs.forEach(function(p) { _LAZY_PKGS_FROM_MODULES.push(p); });
+});
 
 // Packages to lazy-load (by category). All are available — just deferred.
 // Using namespace prefixes (e.g. "@smithy") catches ALL sub-packages.
-const _LAZY_PKGS = [
-  // --- AI Provider SDKs (kept lazy — may be used by Kimi's OpenAI-compat API) ---
-  "openai",
+const _LAZY_PKGS = _LAZY_PKGS_FROM_MODULES.concat([
   // --- GitHub / Octokit ---
   "octokit", "@octokit",
   // --- Heavy features (load on first use) ---
@@ -116,7 +142,7 @@ const _LAZY_PKGS = [
   "css-select", "css-what", "cssom",
   "ora",
   "file-type",
-];
+]);
 
 // Lazy loading state
 const _lazyCache = new Map();
@@ -921,7 +947,14 @@ function _handleSetup(req, res) {
 
 // --- Key Management API ---
 const _ENV_FILE = (process.env.HOME || "/root") + "/.openclaw/env";
-const _KEY_NAMES = ["KIMI_API_KEY", "MOONSHOT_API_KEY", "TELEGRAM_BOT_TOKEN", "DISCORD_BOT_TOKEN", "OPENAI_API_KEY", "GROQ_API_KEY"];
+// Build key list from module registry + Kimi aliases (deduplicated)
+const _KEY_NAMES = (function() {
+  var keys = [];
+  _ALL_MODULES.forEach(function(m) { if (m.key && keys.indexOf(m.key) < 0) keys.push(m.key); });
+  // Kimi aliases (not in module registry — uses OpenAI SDK)
+  ["KIMI_API_KEY", "MOONSHOT_API_KEY"].forEach(function(k) { if (keys.indexOf(k) < 0) keys.push(k); });
+  return keys;
+})();
 
 function _getKeys() {
   const keys = [];
@@ -1005,6 +1038,30 @@ function _handleKeyTest(req, res) {
   } else if (keyName === "DISCORD_BOT_TOKEN") {
     testUrl = "https://discord.com/api/v10/users/@me";
     testOpts = { headers: { "Authorization": "Bot " + val }, timeout: 5000 };
+  } else if (keyName === "ANTHROPIC_API_KEY") {
+    testUrl = "https://api.anthropic.com/v1/models";
+    testOpts = { headers: { "x-api-key": val, "anthropic-version": "2023-06-01" }, timeout: 5000 };
+  } else if (keyName === "GEMINI_API_KEY") {
+    testUrl = "https://generativelanguage.googleapis.com/v1beta/models?key=" + val;
+    testOpts = { timeout: 5000 };
+  } else if (keyName === "MISTRAL_API_KEY") {
+    testUrl = "https://api.mistral.ai/v1/models";
+    testOpts = { headers: { "Authorization": "Bearer " + val }, timeout: 5000 };
+  } else if (keyName === "XAI_API_KEY") {
+    testUrl = "https://api.x.ai/v1/models";
+    testOpts = { headers: { "Authorization": "Bearer " + val }, timeout: 5000 };
+  } else if (keyName === "OPENROUTER_API_KEY") {
+    testUrl = "https://openrouter.ai/api/v1/models";
+    testOpts = { headers: { "Authorization": "Bearer " + val }, timeout: 5000 };
+  } else if (keyName === "CEREBRAS_API_KEY") {
+    testUrl = "https://api.cerebras.ai/v1/models";
+    testOpts = { headers: { "Authorization": "Bearer " + val }, timeout: 5000 };
+  } else if (keyName === "COHERE_API_KEY") {
+    testUrl = "https://api.cohere.ai/v1/models";
+    testOpts = { headers: { "Authorization": "Bearer " + val }, timeout: 5000 };
+  } else if (keyName === "HF_TOKEN") {
+    testUrl = "https://huggingface.co/api/whoami-v2";
+    testOpts = { headers: { "Authorization": "Bearer " + val }, timeout: 5000 };
   }
   if (!testUrl) {
     res.writeHead(200, { "Content-Type": "application/json" });
@@ -1033,6 +1090,52 @@ function _handleKeyTest(req, res) {
     res.end(JSON.stringify({ ok: false, error: e.message }));
   });
   r.on("timeout", function() { r.destroy(); });
+}
+
+// --- Module Management API ---
+function _handleModules(req, res) {
+  var envData = {};
+  try {
+    _fs.readFileSync(_ENV_FILE, "utf8").split("\n").forEach(function(l) {
+      var eq = l.indexOf("=");
+      if (eq > 0) envData[l.substring(0, eq).trim()] = l.substring(eq + 1).trim();
+    });
+  } catch (e) {}
+  var modules = _ALL_MODULES.map(function(m) {
+    var st = _getModuleStatus(m);
+    var keySet = m.key ? !!(envData[m.key] || process.env[m.key]) : false;
+    // canToggle: false for modules with no pkgs (use openai SDK) or always-active (telegram)
+    var canToggle = m.pkgs.length > 0 && m.def !== "active";
+    return { id: m.id, name: m.name, type: m.type, key: m.key, keySet: keySet, status: st, ram: m.ram, canToggle: canToggle };
+  });
+  res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+  res.end(JSON.stringify({ modules: modules, restartNeeded: _restartNeeded }));
+}
+
+function _handleModuleToggle(req, res) {
+  var body = "";
+  req.on("data", function(c) { body += c; });
+  req.on("end", function() {
+    try {
+      var d = JSON.parse(body);
+      var mod = _ALL_MODULES.find(function(m) { return m.id === d.id; });
+      if (!mod || mod.pkgs.length === 0 || mod.def === "active") {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ ok: false, error: "Cannot toggle this module" }));
+        return;
+      }
+      _moduleOverrides[d.id] = d.enabled ? "lazy" : "dead";
+      // Ensure /sdcard/pocketclaw/ directory exists
+      try { _fs.mkdirSync("/sdcard/pocketclaw", { recursive: true }); } catch(e) {}
+      _fs.writeFileSync(_MODULES_FILE, JSON.stringify(_moduleOverrides, null, 2));
+      _restartNeeded = true;
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ ok: true, restartNeeded: true, module: { id: mod.id, status: _moduleOverrides[d.id] } }));
+    } catch (e) {
+      res.writeHead(500, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ ok: false, error: e.message }));
+    }
+  });
 }
 
 // --- Server mode + Control state ---
@@ -1287,6 +1390,9 @@ body::after{content:"";position:fixed;inset:0;background:repeating-linear-gradie
 <button class="btn" onclick="doLauncher()">SET HOME SCREEN</button>
 <button class="btn" onclick="doHarden()">HARDEN SYSTEM</button>
 <div class="sp"></div>
+<div class="sec">MODULES</div>
+<div id="mods"></div>
+<div class="sp"></div>
 <div class="msg" id="msg"></div>
 </div>
 <script>
@@ -1323,14 +1429,32 @@ function doHarden(){
 fetch("/api/setup/harden",{method:"POST"}).then(function(r){return r.json()}).then(function(d){
 msg("Applied "+d.applied+"/"+d.total+" settings")}).catch(function(){msg("Error")})}
 function msg(t){document.getElementById("msg").textContent=t;setTimeout(function(){document.getElementById("msg").textContent=""},5000)}
-poll();setInterval(poll,5000);
+function pollMods(){
+fetch("/api/modules").then(function(r){return r.json()}).then(function(d){
+var h="";
+d.modules.forEach(function(m){
+var icon=m.status==="active"?"\u25CF":m.status==="lazy"?"\u25D0":"\u25CB";
+h+='<div class="row"><span class="lbl">'+icon+" "+m.name+'</span>';
+h+='<span class="val">'+m.status.toUpperCase()+(m.ram?(" ~"+m.ram+"MB"):"")+'</span></div>';
+if(m.canToggle){var cls=m.status==="dead"?"":" on";
+h+='<button class="btn'+cls+'" onclick="toggleMod(\''+m.id+'\','+(m.status==="dead"?"true":"false")+')">'+(m.status==="dead"?"ENABLE":"DISABLE")+'</button>';}
+});
+if(d.restartNeeded)h+='<div class="msg" style="color:#ee3">\u26A0 Restart needed for changes to take effect</div>';
+document.getElementById("mods").innerHTML=h;
+}).catch(function(){})}
+function toggleMod(id,en){
+fetch("/api/modules/toggle",{method:"POST",headers:{"Content-Type":"application/json"},
+body:JSON.stringify({id:id,enabled:en})}).then(function(){pollMods();msg(en?"Enabled (restart needed)":"Disabled (restart needed)")}).catch(function(){msg("Toggle failed")})}
+poll();setInterval(poll,5000);pollMods();
 </script></body></html>`;
 
-// Add serverMode to _getStatus response
+// Add serverMode + V8 heap to _getStatus response
 var _origGetStatus = _getStatus;
 _getStatus = function() {
   var s = _origGetStatus();
   s.serverMode = _serverMode;
+  var pm = process.memoryUsage();
+  s.heap = { used: Math.round(pm.heapUsed / 1048576), limit: Math.round(require("v8").getHeapStatistics().heap_size_limit / 1048576) };
   return s;
 };
 
@@ -1467,6 +1591,15 @@ _http.Server.prototype.listen = function () {
         }
         if (req.url === "/api/setup/harden" && req.method === "POST") {
           _handleHarden(req, res);
+          return true;
+        }
+        // --- Module management endpoints ---
+        if (req.url === "/api/modules" && req.method === "GET") {
+          _handleModules(req, res);
+          return true;
+        }
+        if (req.url === "/api/modules/toggle" && req.method === "POST") {
+          _handleModuleToggle(req, res);
           return true;
         }
       }

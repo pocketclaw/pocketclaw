@@ -214,7 +214,7 @@ public class LauncherActivity extends Activity implements DashboardView.ControlL
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding((int)(12*d), (int)(8*d), (int)(12*d), (int)(60*d));
+        root.setPadding((int)(12*d), (int)(8*d), (int)(12*d), (int)(12*d));
 
         loadCrab();
         crabView = mono(crab[0], 11, 0xFFEE3333);
@@ -281,57 +281,12 @@ public class LauncherActivity extends Activity implements DashboardView.ControlL
 
         mainFrame.addView(vbox);
 
-        // ─── Nav bar at bottom ───────────────────────────────
-        LinearLayout navBar = new LinearLayout(this);
-        navBar.setOrientation(LinearLayout.HORIZONTAL);
-        navBar.setBackgroundColor(0xFF0A0A0A);
-        navBar.setGravity(Gravity.CENTER);
-        int navH = (int)(48*d);
-
-        TextView btnSettings = navBtn("\u2699", d);
-        btnSettings.setOnClickListener(v -> switchTab(TAB_CTRL));
-
-        TextView btnWifi = navBtn("\u25D4", d);
-        btnWifi.setOnClickListener(v -> {
-            if (wifiManager != null) {
-                boolean now = wifiManager.isWifiEnabled();
-                wifiManager.setWifiEnabled(!now);
-                Toast.makeText(this, "WiFi " + (!now ? "ON" : "OFF"), Toast.LENGTH_SHORT).show();
-            }
-        });
-
-        TextView btnHome = navBtn("\u25A0", d);
-        btnHome.setTextColor(0xFFEE3333);
-        btnHome.setOnClickListener(v -> switchTab(TAB_STATUS));
-
-        TextView btnBack = navBtn("\u25C0", d);
-        btnBack.setOnClickListener(v -> {
-            try { Runtime.getRuntime().exec(new String[]{"input", "keyevent", "4"}); }
-            catch (Exception e) {}
-        });
-
-        navBar.addView(btnSettings, new LinearLayout.LayoutParams(0, navH, 1));
-        navBar.addView(btnWifi, new LinearLayout.LayoutParams(0, navH, 1));
-        navBar.addView(btnHome, new LinearLayout.LayoutParams(0, navH, 1));
-        navBar.addView(btnBack, new LinearLayout.LayoutParams(0, navH, 1));
-
-        FrameLayout.LayoutParams navParams = new FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.MATCH_PARENT, navH);
-        navParams.gravity = Gravity.BOTTOM;
-        mainFrame.addView(navBar, navParams);
-
         setContentView(mainFrame);
         updateTabHighlight();
 
         // Permissions
         if (checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(new String[]{Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.WRITE_EXTERNAL_STORAGE}, 1);
-        }
-        if (Settings.canDrawOverlays(this)) {
-            startService(new Intent(this, FloatingCrabService.class));
-        } else {
-            startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                android.net.Uri.parse("package:" + getPackageName())));
         }
 
         // First-run check
@@ -372,7 +327,7 @@ public class LauncherActivity extends Activity implements DashboardView.ControlL
             dv.setVisibility(View.VISIBLE);
             dv.setCurrentPage(tab); // LOGS=1, KEYS=2, CTRL=3
             dv.refreshView();
-            if (tab == TAB_KEYS) fetchKeys();
+            if (tab == TAB_KEYS) { fetchKeys(); fetchModules(); }
         }
         updateTabHighlight();
     }
@@ -386,18 +341,6 @@ public class LauncherActivity extends Activity implements DashboardView.ControlL
     }
 
     // ─── HELPERS ─────────────────────────────────────────────────
-
-    private TextView navBtn(String icon, float d) {
-        TextView btn = new TextView(this);
-        btn.setText(icon);
-        btn.setTextSize(22);
-        btn.setTextColor(0xFF888888);
-        btn.setTypeface(Typeface.DEFAULT_BOLD);
-        btn.setGravity(Gravity.CENTER);
-        btn.setClickable(true);
-        btn.setFocusable(true);
-        return btn;
-    }
 
     private TextView mono(String s, int size, int color) {
         TextView tv = new TextView(this);
@@ -566,6 +509,12 @@ public class LauncherActivity extends Activity implements DashboardView.ControlL
         dashboard.setLazy(lazyTotal, lazyLoaded, lazyDead);
         dashboard.setWifiToggle(wifiManager != null && wifiManager.isWifiEnabled());
         dashboard.setVolume(getVolumePercent());
+
+        // V8 Heap
+        int hi = j.indexOf("\"heap\":{");
+        if (hi >= 0) {
+            dashboard.setHeap(num(j, "\"used\":", hi), num(j, "\"limit\":", hi));
+        }
     }
 
     // ─── ORIGINAL STATUS FORMATTING ──────────────────────────────
@@ -723,6 +672,75 @@ public class LauncherActivity extends Activity implements DashboardView.ControlL
         }).start();
     }
 
+    // ─── MODULES FETCH ────────────────────────────────────────────
+
+    private void fetchModules() {
+        new Thread(() -> {
+            try {
+                URL url = new URL("http://localhost:9000/api/modules");
+                HttpURLConnection c = (HttpURLConnection) url.openConnection();
+                c.setConnectTimeout(3000);
+                c.setReadTimeout(3000);
+                BufferedReader r = new BufferedReader(new InputStreamReader(c.getInputStream()));
+                StringBuilder sb = new StringBuilder();
+                String line;
+                while ((line = r.readLine()) != null) sb.append(line);
+                r.close();
+                String json = sb.toString();
+
+                ArrayList<DashboardView.ModuleInfo> modList = new ArrayList<>();
+                boolean restNeeded = json.contains("\"restartNeeded\":true");
+                int pos = 0;
+                while (true) {
+                    int idS = json.indexOf("\"id\":\"", pos);
+                    if (idS < 0) break;
+                    int idA = idS + 6;
+                    int idE = json.indexOf('"', idA);
+                    DashboardView.ModuleInfo m = new DashboardView.ModuleInfo();
+                    m.id = json.substring(idA, idE);
+
+                    int nextId = json.indexOf("\"id\":\"", idE + 1);
+                    int blockEnd = nextId > 0 ? nextId : json.length();
+
+                    int nmS = json.indexOf("\"name\":\"", idE);
+                    if (nmS >= 0 && nmS < blockEnd) { int a = nmS + 8; m.name = json.substring(a, json.indexOf('"', a)); }
+
+                    int tyS = json.indexOf("\"type\":\"", idE);
+                    if (tyS >= 0 && tyS < blockEnd) { int a = tyS + 8; m.type = json.substring(a, json.indexOf('"', a)); }
+
+                    int kyS = json.indexOf("\"key\":\"", idE);
+                    if (kyS >= 0 && kyS < blockEnd) { int a = kyS + 7; m.key = json.substring(a, json.indexOf('"', a)); }
+                    else m.key = null;
+
+                    int ksS = json.indexOf("\"keySet\":", idE);
+                    if (ksS >= 0 && ksS < blockEnd) m.keySet = json.substring(ksS + 9, ksS + 13).contains("true");
+
+                    int stS = json.indexOf("\"status\":\"", idE);
+                    if (stS >= 0 && stS < blockEnd) { int a = stS + 10; m.status = json.substring(a, json.indexOf('"', a)); }
+
+                    int rmS = json.indexOf("\"ram\":", idE);
+                    if (rmS >= 0 && rmS < blockEnd) m.ram = num(json, "\"ram\":", rmS - 1);
+
+                    int ctS = json.indexOf("\"canToggle\":", idE);
+                    if (ctS >= 0 && ctS < blockEnd) m.canToggle = json.substring(ctS + 12, ctS + 16).contains("true");
+
+                    modList.add(m);
+                    pos = idE + 1;
+                }
+                final boolean fRestart = restNeeded;
+                handler.post(() -> {
+                    if (dashboard != null) {
+                        dashboard.setModules(modList);
+                        dashboard.setRestartNeeded(fRestart);
+                        dashboard.refreshView();
+                    }
+                });
+            } catch (Exception e) {
+                Log.d("PocketClaw", "fetchModules error: " + e);
+            }
+        }).start();
+    }
+
     // ─── UTILITY ─────────────────────────────────────────────────
 
     private String getBatteryInfo() {
@@ -823,7 +841,6 @@ public class LauncherActivity extends Activity implements DashboardView.ControlL
             fetchInterval = 30000;
             dashboard.setServerMode(true);
             dashboard.refreshView();
-            stopService(new Intent(this, FloatingCrabService.class));
             postToApi("/api/control/server-mode", "{\"enabled\":true}");
             Toast.makeText(this, "Server mode ON", Toast.LENGTH_SHORT).show();
         } else {
@@ -835,7 +852,6 @@ public class LauncherActivity extends Activity implements DashboardView.ControlL
             fetchInterval = 5000;
             dashboard.setServerMode(false);
             dashboard.refreshView();
-            if (Settings.canDrawOverlays(this)) startService(new Intent(this, FloatingCrabService.class));
             postToApi("/api/control/server-mode", "{\"enabled\":false}");
             Toast.makeText(this, "Server mode OFF", Toast.LENGTH_SHORT).show();
         }
@@ -895,8 +911,149 @@ public class LauncherActivity extends Activity implements DashboardView.ControlL
     }
 
     @Override
+    public void onModuleToggle(String id, boolean enable) {
+        postToApi("/api/modules/toggle", "{\"id\":\"" + id + "\",\"enabled\":" + enable + "}");
+        handler.postDelayed(this::fetchModules, 500);
+        Toast.makeText(this, enable ? "Enabled (restart needed)" : "Disabled (restart needed)", Toast.LENGTH_SHORT).show();
+    }
+
+    @Override
     public void onPageChanged(int page) {
         switchTab(page);
+    }
+
+    @Override
+    public void onKeySearch(String currentFilter) {
+        EditText input = new EditText(this);
+        input.setHint("Filter by name, module, type...");
+        input.setTypeface(Typeface.MONOSPACE);
+        if (currentFilter != null && !currentFilter.isEmpty()) input.setText(currentFilter);
+        new AlertDialog.Builder(this)
+            .setTitle("Search Keys")
+            .setView(input)
+            .setPositiveButton("FILTER", (d, w) -> {
+                String val = input.getText().toString().trim();
+                if (dashboard != null) dashboard.setKeyFilter(val);
+            })
+            .setNegativeButton("CLEAR", (d, w) -> {
+                if (dashboard != null) dashboard.setKeyFilter("");
+            })
+            .show();
+    }
+
+    @Override
+    public void onForceGC() {
+        new Thread(() -> {
+            try {
+                URL url = new URL("http://localhost:9000/api/control/gc");
+                HttpURLConnection c = (HttpURLConnection) url.openConnection();
+                c.setRequestMethod("POST");
+                c.setRequestProperty("Content-Type", "application/json");
+                c.setDoOutput(true);
+                c.setConnectTimeout(3000);
+                c.setReadTimeout(3000);
+                OutputStream os = c.getOutputStream();
+                os.write("{}".getBytes());
+                os.close();
+                BufferedReader r = new BufferedReader(new InputStreamReader(c.getInputStream()));
+                StringBuilder sb = new StringBuilder();
+                String line;
+                while ((line = r.readLine()) != null) sb.append(line);
+                r.close();
+                String json = sb.toString();
+                boolean ok = json.contains("\"ok\":true");
+                int freed = 0;
+                int fi = json.indexOf("\"freedMB\":");
+                if (fi >= 0) { fi += 10; int fe = fi; while (fe < json.length() && Character.isDigit(json.charAt(fe))) fe++; if (fe > fi) freed = Integer.parseInt(json.substring(fi, fe)); }
+                final String msg = ok ? "GC freed " + freed + " MB" : "GC not available";
+                handler.post(() -> Toast.makeText(this, msg, Toast.LENGTH_SHORT).show());
+            } catch (Exception e) {
+                handler.post(() -> Toast.makeText(this, "GC failed", Toast.LENGTH_SHORT).show());
+            }
+        }).start();
+    }
+
+    @Override
+    public void onKeysRefresh() {
+        fetchKeys();
+        fetchModules();
+        Toast.makeText(this, "Refreshing keys...", Toast.LENGTH_SHORT).show();
+    }
+
+    @Override
+    public void onDebloat() {
+        new AlertDialog.Builder(this)
+            .setTitle("Debloat Android")
+            .setMessage("Disable 126 bloatware packages?\nThis can be reversed with restore-debloat.sh.")
+            .setPositiveButton("DEBLOAT", (d, w) -> {
+                Toast.makeText(this, "Debloating...", Toast.LENGTH_SHORT).show();
+                new Thread(() -> {
+                    try {
+                        URL url = new URL("http://localhost:9000/api/setup/debloat");
+                        HttpURLConnection c = (HttpURLConnection) url.openConnection();
+                        c.setRequestMethod("POST");
+                        c.setConnectTimeout(30000);
+                        c.setReadTimeout(30000);
+                        BufferedReader r = new BufferedReader(new InputStreamReader(c.getInputStream()));
+                        StringBuilder sb = new StringBuilder();
+                        String line;
+                        while ((line = r.readLine()) != null) sb.append(line);
+                        r.close();
+                        String json = sb.toString();
+                        int done = num(json, "\"done\":", 0);
+                        int total = num(json, "\"total\":", 0);
+                        handler.post(() -> Toast.makeText(this, "Debloat: " + done + "/" + total + " disabled", Toast.LENGTH_LONG).show());
+                    } catch (Exception e) {
+                        handler.post(() -> Toast.makeText(this, "Debloat failed", Toast.LENGTH_SHORT).show());
+                    }
+                }).start();
+            })
+            .setNegativeButton("CANCEL", null)
+            .show();
+    }
+
+    @Override
+    public void onHarden() {
+        new AlertDialog.Builder(this)
+            .setTitle("Harden System")
+            .setMessage("Apply hardening settings?\nAnimations off, WiFi sleep never, screen timeout 30min.")
+            .setPositiveButton("HARDEN", (d, w) -> {
+                new Thread(() -> {
+                    try {
+                        URL url = new URL("http://localhost:9000/api/setup/harden");
+                        HttpURLConnection c = (HttpURLConnection) url.openConnection();
+                        c.setRequestMethod("POST");
+                        c.setConnectTimeout(10000);
+                        c.setReadTimeout(10000);
+                        BufferedReader r = new BufferedReader(new InputStreamReader(c.getInputStream()));
+                        StringBuilder sb = new StringBuilder();
+                        String line;
+                        while ((line = r.readLine()) != null) sb.append(line);
+                        r.close();
+                        String json = sb.toString();
+                        int applied = num(json, "\"applied\":", 0);
+                        int total = num(json, "\"total\":", 0);
+                        handler.post(() -> Toast.makeText(this, "Hardened: " + applied + "/" + total + " applied", Toast.LENGTH_LONG).show());
+                    } catch (Exception e) {
+                        handler.post(() -> Toast.makeText(this, "Harden failed", Toast.LENGTH_SHORT).show());
+                    }
+                }).start();
+            })
+            .setNegativeButton("CANCEL", null)
+            .show();
+    }
+
+    @Override
+    public void onSetHome() {
+        new AlertDialog.Builder(this)
+            .setTitle("Set As Home Launcher")
+            .setMessage("Set PocketClaw as the default home launcher?")
+            .setPositiveButton("SET", (d, w) -> {
+                postToApi("/api/setup/launcher", "{}");
+                Toast.makeText(this, "PocketClaw set as home", Toast.LENGTH_SHORT).show();
+            })
+            .setNegativeButton("CANCEL", null)
+            .show();
     }
 
     private void postToApi(String path, String body) {

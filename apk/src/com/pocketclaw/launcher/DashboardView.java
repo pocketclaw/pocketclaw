@@ -43,6 +43,7 @@ public class DashboardView extends View {
     private String[] logs = new String[0];
     private int lazyTotal = 0, lazyLoaded = 0, lazyDead = 0;
     private boolean serverMode = false;
+    private int heapUsed = 0, heapLimit = 0;
 
     // Crab animation
     private String[] crabFrames;
@@ -57,11 +58,37 @@ public class DashboardView extends View {
     }
     private ArrayList<KeyInfo> keys = new ArrayList<>();
 
+    // Module data (from /api/modules)
+    public static class ModuleInfo {
+        public String id, name, type, key, status;
+        public int ram;
+        public boolean keySet, canToggle;
+    }
+    private ArrayList<ModuleInfo> modules = new ArrayList<>();
+    private boolean restartNeeded = false;
+
+    // Keys search filter
+    private String keyFilter = "";
+    private final RectF searchBarRect = new RectF();
+    private final RectF searchClearRect = new RectF();
+    private ArrayList<KeyInfo> displayedKeys = new ArrayList<>();
+
+    // Scroll support (shared, reset on page change)
+    private float scrollY = 0;
+    private float maxScrollY = 0;
+    private float lastTouchY = 0;
+    private boolean isScrolling = false;
+
+    // Pull-to-refresh for KEYS
+    private float pullDistance = 0;
+    private boolean pullTriggered = false;
+
     // CTRL page state
     private int brightness = 60;
     private int volume = 50;
     private boolean wifiToggle = false;
     private boolean flashlight = false;
+    private boolean systemSetupExpanded = false;
 
     // Touch tracking for tabs and controls
     private final RectF[] tabRects = new RectF[4];
@@ -70,9 +97,17 @@ public class DashboardView extends View {
     private final RectF wifiRect = new RectF();
     private final RectF flashRect = new RectF();
     private final RectF serverRect = new RectF();
+    private final RectF gcRect = new RectF();
     private final RectF rebootRect = new RectF();
+    private final RectF setupToggleRect = new RectF();
+    private final RectF debloatRect = new RectF();
+    private final RectF hardenRect = new RectF();
+    private final RectF setHomeRect = new RectF();
     private final ArrayList<RectF> keyEditRects = new ArrayList<>();
     private final ArrayList<RectF> keyTestRects = new ArrayList<>();
+    private final ArrayList<RectF> moduleToggleRects = new ArrayList<>();
+    private final ArrayList<String> moduleToggleIds = new ArrayList<>();
+    private final ArrayList<Boolean> moduleToggleEnable = new ArrayList<>();
 
     // Swipe detection
     private float touchDownX = 0, touchDownY = 0;
@@ -103,7 +138,14 @@ public class DashboardView extends View {
         void onReboot();
         void onKeyEdit(String name);
         void onKeyTest(String name);
+        void onModuleToggle(String id, boolean enable);
         void onPageChanged(int page);
+        void onKeySearch(String currentFilter);
+        void onForceGC();
+        void onKeysRefresh();
+        void onDebloat();
+        void onHarden();
+        void onSetHome();
     }
     private ControlListener listener;
 
@@ -119,7 +161,10 @@ public class DashboardView extends View {
     }
 
     public void setControlListener(ControlListener l) { this.listener = l; }
-    public void setCurrentPage(int page) { this.currentPage = page; invalidate(); }
+    public void setCurrentPage(int page) {
+        if (this.currentPage == PAGE_KEYS && page != PAGE_KEYS) keyFilter = "";
+        this.currentPage = page; this.scrollY = 0; this.pullDistance = 0; invalidate();
+    }
     public int getCurrentPage() { return currentPage; }
     public void setEffectsEnabled(boolean e) { this.effectsEnabled = e; }
 
@@ -140,11 +185,16 @@ public class DashboardView extends View {
     public void setLazy(int total, int loaded, int dead) { this.lazyTotal = total; this.lazyLoaded = loaded; this.lazyDead = dead; }
     public void setServerMode(boolean m) { this.serverMode = m; }
     public void setKeys(ArrayList<KeyInfo> k) { this.keys = k; }
+    public void setModules(ArrayList<ModuleInfo> m) { this.modules = m; }
+    public void setRestartNeeded(boolean r) { this.restartNeeded = r; }
     public void setBrightness(int b) { this.brightness = b; }
     public void setVolume(int v) { this.volume = v; }
     public void setWifiToggle(boolean w) { this.wifiToggle = w; }
     public void setFlashlight(boolean f) { this.flashlight = f; }
     public void setBootAnimDone() { this.bootAnimDone = true; }
+    public void setHeap(int used, int limit) { this.heapUsed = used; this.heapLimit = limit; }
+    public void setKeyFilter(String f) { this.keyFilter = f != null ? f : ""; scrollY = 0; invalidate(); }
+    public String getKeyFilter() { return keyFilter; }
 
     /** Call after batch-setting data to trigger a single redraw */
     public void refreshView() { invalidate(); }
@@ -176,23 +226,52 @@ public class DashboardView extends View {
     // ─── LOGS PAGE ────────────────────────────────────────────────
 
     private void drawLogsPage(Canvas canvas, int w, int h, float pad) {
-        float y = pad;
+        float maxY = h;
+        float lineH = crt.getLineHeight(10) + crt.dp(1);
+        float heapLineH = heapLimit > 0 ? crt.getLineHeight(8) + crt.dp(6) : 0;
+        float lazyLineH = lazyTotal > 0 ? crt.getLineHeight(8) + crt.dp(4) : 0;
+        float headerH = crt.getLineHeight(20) + crt.dp(2) + crt.getLineHeight(9) + crt.dp(8)
+                       + heapLineH + lazyLineH;
+        int maxLines = (int)((maxY - pad - headerH) / lineH);
+        int showCount = Math.min(logs.length, Math.max(1, maxLines));
+
+        float contentH = headerH + showCount * lineH;
+        float y = Math.max(pad, (maxY - contentH) / 2);
 
         crt.drawText(canvas, "LOGS", (w - crt.measureText("LOGS", 20)) / 2, y, 20, CRTRenderer.GREEN);
         y += crt.getLineHeight(20) + crt.dp(2);
 
         String sub = "REAL-TIME GATEWAY OUTPUT";
         crt.drawText(canvas, sub, (w - crt.measureText(sub, 9)) / 2, y, 9, CRTRenderer.DIM);
-        y += crt.getLineHeight(9) + crt.dp(8);
+        y += crt.getLineHeight(9) + crt.dp(4);
 
-        // All log lines
-        for (int i = 0; i < logs.length; i++) {
+        // V8 Heap monitor
+        if (heapLimit > 0) {
+            String heapStr = "V8 HEAP: " + heapUsed + "/" + heapLimit + "MB";
+            crt.drawText(canvas, heapStr, pad, y, 8, CRTRenderer.MID);
+            float barX = pad + crt.measureText(heapStr, 8) + crt.dp(6);
+            float barW = w - barX - pad;
+            float pct = heapUsed * 100f / heapLimit;
+            crt.drawBar(canvas, barX, y - crt.dp(4), barW, crt.dp(6), pct, true);
+            y += crt.getLineHeight(8) + crt.dp(2);
+        }
+
+        // Lazy loading info
+        if (lazyTotal > 0) {
+            String lazyStr = "LAZY: " + lazyLoaded + "/" + lazyTotal + " loaded  DEAD: " + lazyDead;
+            crt.drawText(canvas, lazyStr, pad, y, 8, CRTRenderer.DIM);
+            y += crt.getLineHeight(8) + crt.dp(4);
+        }
+
+        y += crt.dp(4);
+        int startIdx = Math.max(0, logs.length - showCount);
+        for (int i = startIdx; i < logs.length && y + lineH <= maxY; i++) {
             String line = logs[i];
             if (line.length() > 42) line = line.substring(0, 42);
             int color = line.contains("ERROR") || line.startsWith("!") ? CRTRenderer.RED :
                         line.contains("WARN") ? CRTRenderer.WARN : CRTRenderer.MID;
             crt.drawText(canvas, "\u203A " + line, pad, y, 10, color);
-            y += crt.getLineHeight(10) + crt.dp(1);
+            y += lineH;
         }
 
         if (logs.length == 0) {
@@ -200,9 +279,86 @@ public class DashboardView extends View {
         }
     }
 
-    // ─── KEYS PAGE ────────────────────────────────────────────────
+    // ─── KEYS PAGE (with module info + scroll) ─────────────────────
+
+    private ModuleInfo findModuleForKey(String keyName) {
+        for (int i = 0; i < modules.size(); i++) {
+            ModuleInfo m = modules.get(i);
+            if (m.key != null && m.key.equals(keyName)) return m;
+        }
+        return null;
+    }
+
+    private String getKeyType(KeyInfo k) {
+        ModuleInfo mod = findModuleForKey(k.name);
+        return (mod != null && mod.type != null) ? mod.type : "other";
+    }
+
+    private boolean matchesFilter(KeyInfo k) {
+        if (keyFilter.isEmpty()) return true;
+        String f = keyFilter.toLowerCase();
+        if (k.name.toLowerCase().contains(f)) return true;
+        ModuleInfo mod = findModuleForKey(k.name);
+        if (mod != null) {
+            if (mod.name != null && mod.name.toLowerCase().contains(f)) return true;
+            if (mod.type != null && mod.type.toLowerCase().contains(f)) return true;
+        }
+        return false;
+    }
 
     private void drawKeysPage(Canvas canvas, int w, int h, float pad) {
+        float viewH = h;
+        float cardH = crt.dp(76);
+        float cardGap = crt.dp(6);
+        float searchH = crt.dp(30);
+        float catHeaderH = crt.dp(20);
+
+        // Count filtered keys and categories
+        int filteredCount = 0, providerCount = 0, channelCount = 0, otherCount = 0;
+        boolean hasModules = !modules.isEmpty();
+        for (int i = 0; i < keys.size(); i++) {
+            if (matchesFilter(keys.get(i))) {
+                filteredCount++;
+                if (hasModules) {
+                    String type = getKeyType(keys.get(i));
+                    if ("provider".equals(type)) providerCount++;
+                    else if ("channel".equals(type)) channelCount++;
+                    else otherCount++;
+                }
+            }
+        }
+
+        // Compute content height
+        float headerH = crt.getLineHeight(20) + crt.dp(2) + crt.getLineHeight(9) + crt.dp(8)
+                       + searchH + crt.dp(8);
+        float cardsH;
+        if (hasModules) {
+            cardsH = 0;
+            if (providerCount > 0) cardsH += catHeaderH + providerCount * cardH + (providerCount - 1) * cardGap + cardGap;
+            if (channelCount > 0) cardsH += catHeaderH + channelCount * cardH + (channelCount - 1) * cardGap + cardGap;
+            if (otherCount > 0) cardsH += catHeaderH + otherCount * cardH + (otherCount - 1) * cardGap + cardGap;
+        } else {
+            cardsH = filteredCount > 0 ? filteredCount * cardH + (filteredCount - 1) * cardGap : 0;
+        }
+        float restartH = restartNeeded ? crt.dp(24) : 0;
+        float footerH = crt.dp(12) + crt.getLineHeight(6);
+        float totalContentH = headerH + cardsH + restartH + footerH;
+
+        maxScrollY = Math.max(0, totalContentH - viewH + pad * 2);
+        scrollY = Math.max(0, Math.min(scrollY, maxScrollY));
+
+        // Pull-to-refresh indicator (before scroll transform)
+        if (pullDistance > 0 && scrollY == 0) {
+            String pullStr = pullDistance > crt.dp(60) ? "RELEASE TO REFRESH" : "PULL TO REFRESH";
+            int pullColor = pullDistance > crt.dp(60) ? CRTRenderer.GREEN : CRTRenderer.DIM;
+            float pullY = Math.min(pullDistance * 0.4f, crt.dp(30));
+            crt.drawText(canvas, pullStr, (w - crt.measureText(pullStr, 9)) / 2, pullY, 9, pullColor);
+        }
+
+        canvas.save();
+        canvas.clipRect(0, 0, w, viewH);
+        canvas.translate(0, -scrollY);
+
         float y = pad;
 
         crt.drawText(canvas, "API KEYS", (w - crt.measureText("API KEYS", 20)) / 2, y, 20, CRTRenderer.GREEN);
@@ -210,61 +366,175 @@ public class DashboardView extends View {
 
         String sub = "MANAGE YOUR CREDENTIALS";
         crt.drawText(canvas, sub, (w - crt.measureText(sub, 9)) / 2, y, 9, CRTRenderer.DIM);
-        y += crt.getLineHeight(9) + crt.dp(12);
+        y += crt.getLineHeight(9) + crt.dp(8);
+
+        // Search bar
+        float searchW = w - pad * 2;
+        crt.drawBorderedRect(canvas, pad, y, searchW, searchH, 0xFF000D00,
+            keyFilter.isEmpty() ? CRTRenderer.DIM : CRTRenderer.GREEN);
+        if (keyFilter.isEmpty()) {
+            crt.drawText(canvas, "\u203A SEARCH KEYS...", pad + crt.dp(8), y + crt.dp(20), 10, CRTRenderer.DIM);
+        } else {
+            crt.drawText(canvas, "\u203A " + keyFilter, pad + crt.dp(8), y + crt.dp(20), 10, CRTRenderer.GREEN);
+            String clearStr = "[X]";
+            float clearX = w - pad - crt.measureText(clearStr, 10) - crt.dp(8);
+            crt.drawText(canvas, clearStr, clearX, y + crt.dp(20), 10, CRTRenderer.RED);
+            searchClearRect.set(clearX - crt.dp(4), y, w - pad, y + searchH);
+            String countStr = filteredCount + "/" + keys.size();
+            float countW = crt.measureText(countStr, 8);
+            crt.drawText(canvas, countStr, clearX - countW - crt.dp(8), y + crt.dp(20), 8, CRTRenderer.MID);
+        }
+        searchBarRect.set(pad, y, w - pad, y + searchH);
+        y += searchH + crt.dp(8);
 
         keyEditRects.clear();
         keyTestRects.clear();
+        moduleToggleRects.clear();
+        moduleToggleIds.clear();
+        moduleToggleEnable.clear();
+        displayedKeys.clear();
 
-        for (int i = 0; i < keys.size(); i++) {
-            KeyInfo k = keys.get(i);
-
-            // Key card
-            float cardH = crt.dp(56);
-            crt.drawBorderedRect(canvas, pad, y, w - pad * 2, cardH, 0xFF000D00, CRTRenderer.DIM);
-
-            // Dot
-            float dotY = y + crt.dp(14);
-            crt.drawStatusDot(canvas, pad + crt.dp(14), dotY, crt.dp(4), k.set);
-
-            // Name
-            crt.drawText(canvas, k.name, pad + crt.dp(28), y + crt.dp(16), 10, CRTRenderer.GREEN);
-
-            // Masked value
-            String val = k.set ? k.masked : "not set";
-            int valColor = k.set ? CRTRenderer.MID : 0xFF555555;
-            crt.drawText(canvas, val, pad + crt.dp(28), y + crt.dp(32), 8, valColor);
-
-            // EDIT button
-            float btnW = crt.dp(42);
-            float btnH = crt.dp(20);
-            float editX = w - pad - btnW - crt.dp(8);
-            float editY = y + crt.dp(8);
-            if (k.set) {
-                float testX = editX - btnW - crt.dp(8);
-                crt.drawBorderedRect(canvas, testX, editY, btnW, btnH, 0xFF001A00, CRTRenderer.DIM);
-                String testStr = "TEST";
-                crt.drawText(canvas, testStr, testX + (btnW - crt.measureText(testStr, 8)) / 2, editY + crt.dp(14), 8, CRTRenderer.MID);
-                keyTestRects.add(new RectF(testX, editY, testX + btnW, editY + btnH));
-            } else {
-                keyTestRects.add(new RectF());
+        if (hasModules) {
+            if (providerCount > 0) {
+                crt.drawText(canvas, "\u2500 PROVIDERS", pad + crt.dp(4), y + crt.dp(14), 8, CRTRenderer.DIM);
+                y += catHeaderH;
+                for (int i = 0; i < keys.size(); i++) {
+                    KeyInfo k = keys.get(i);
+                    if (!matchesFilter(k) || !"provider".equals(getKeyType(k))) continue;
+                    displayedKeys.add(k);
+                    drawKeyCard(canvas, k, pad, y, w, cardH);
+                    y += cardH + cardGap;
+                }
             }
-            crt.drawBorderedRect(canvas, editX, editY, btnW, btnH, 0xFF001A00, CRTRenderer.DIM);
-            String editStr = "EDIT";
-            crt.drawText(canvas, editStr, editX + (btnW - crt.measureText(editStr, 8)) / 2, editY + crt.dp(14), 8, CRTRenderer.MID);
-            keyEditRects.add(new RectF(editX, editY, editX + btnW, editY + btnH));
+            if (channelCount > 0) {
+                crt.drawText(canvas, "\u2500 CHANNELS", pad + crt.dp(4), y + crt.dp(14), 8, CRTRenderer.DIM);
+                y += catHeaderH;
+                for (int i = 0; i < keys.size(); i++) {
+                    KeyInfo k = keys.get(i);
+                    if (!matchesFilter(k) || !"channel".equals(getKeyType(k))) continue;
+                    displayedKeys.add(k);
+                    drawKeyCard(canvas, k, pad, y, w, cardH);
+                    y += cardH + cardGap;
+                }
+            }
+            if (otherCount > 0) {
+                crt.drawText(canvas, "\u2500 OTHER", pad + crt.dp(4), y + crt.dp(14), 8, CRTRenderer.DIM);
+                y += catHeaderH;
+                for (int i = 0; i < keys.size(); i++) {
+                    KeyInfo k = keys.get(i);
+                    if (!matchesFilter(k)) continue;
+                    String type = getKeyType(k);
+                    if ("provider".equals(type) || "channel".equals(type)) continue;
+                    displayedKeys.add(k);
+                    drawKeyCard(canvas, k, pad, y, w, cardH);
+                    y += cardH + cardGap;
+                }
+            }
+        } else {
+            for (int i = 0; i < keys.size(); i++) {
+                KeyInfo k = keys.get(i);
+                if (!matchesFilter(k)) continue;
+                displayedKeys.add(k);
+                drawKeyCard(canvas, k, pad, y, w, cardH);
+                y += cardH + cardGap;
+            }
+        }
 
-            y += cardH + crt.dp(6);
+        if (restartNeeded) {
+            y += crt.dp(4);
+            String warn = "\u26A0 RESTART NEEDED";
+            crt.drawText(canvas, warn, (w - crt.measureText(warn, 10)) / 2, y, 10, CRTRenderer.WARN);
+            y += crt.dp(20);
         }
 
         y += crt.dp(12);
         String footer = "ALL KEYS STORED LOCALLY ON DEVICE";
         crt.drawText(canvas, footer, (w - crt.measureText(footer, 6)) / 2, y, 6, 0xFF082A08);
+
+        canvas.restore();
+
+        // Scroll indicator (outside scroll transform)
+        if (maxScrollY > 0) {
+            float thumbH = Math.max(crt.dp(20), viewH * (viewH / totalContentH));
+            float thumbY = (viewH - thumbH) * (scrollY / maxScrollY);
+            crt.drawRect(canvas, w - crt.dp(3), thumbY, crt.dp(2), thumbH, 0x6600FF41);
+        }
+    }
+
+    private void drawKeyCard(Canvas canvas, KeyInfo k, float pad, float y, int w, float cardH) {
+        ModuleInfo mod = findModuleForKey(k.name);
+        crt.drawBorderedRect(canvas, pad, y, w - pad * 2, cardH, 0xFF000D00, CRTRenderer.DIM);
+        crt.drawStatusDot(canvas, pad + crt.dp(14), y + crt.dp(14), crt.dp(4), k.set);
+        crt.drawText(canvas, k.name, pad + crt.dp(28), y + crt.dp(16), 10, CRTRenderer.GREEN);
+
+        String val = k.set ? k.masked : "not set";
+        int valColor = k.set ? CRTRenderer.MID : 0xFF555555;
+        crt.drawText(canvas, val, pad + crt.dp(28), y + crt.dp(32), 8, valColor);
+
+        if (mod != null) {
+            String statusStr = mod.status.toUpperCase();
+            int statusColor = "active".equals(mod.status) ? CRTRenderer.GREEN :
+                              "lazy".equals(mod.status) ? CRTRenderer.WARN : 0xFF555555;
+            String modLine = mod.name + " \u2022 " + statusStr;
+            if (mod.ram > 0) modLine += " \u2022 ~" + mod.ram + "MB";
+            crt.drawText(canvas, modLine, pad + crt.dp(28), y + crt.dp(48), 7, statusColor);
+
+            if (mod.canToggle) {
+                boolean isDead = "dead".equals(mod.status);
+                float tbtnW = crt.dp(52);
+                float tbtnH = crt.dp(16);
+                float tbtnX = w - pad - tbtnW - crt.dp(8);
+                float tbtnY = y + crt.dp(40);
+                int tbtnBorder = isDead ? CRTRenderer.DIM : CRTRenderer.WARN;
+                crt.drawBorderedRect(canvas, tbtnX, tbtnY, tbtnW, tbtnH, 0xFF001A00, tbtnBorder);
+                String tbtnStr = isDead ? "ENABLE" : "DISABLE";
+                int tbtnColor = isDead ? CRTRenderer.MID : CRTRenderer.WARN;
+                crt.drawText(canvas, tbtnStr, tbtnX + (tbtnW - crt.measureText(tbtnStr, 7)) / 2, tbtnY + crt.dp(12), 7, tbtnColor);
+                moduleToggleRects.add(new RectF(tbtnX, tbtnY, tbtnX + tbtnW, tbtnY + tbtnH));
+                moduleToggleIds.add(mod.id);
+                moduleToggleEnable.add(isDead);
+            }
+        }
+
+        float btnW = crt.dp(42);
+        float btnH = crt.dp(20);
+        float editX = w - pad - btnW - crt.dp(8);
+        float editY = y + crt.dp(8);
+        if (k.set) {
+            float testX = editX - btnW - crt.dp(8);
+            crt.drawBorderedRect(canvas, testX, editY, btnW, btnH, 0xFF001A00, CRTRenderer.DIM);
+            String testStr = "TEST";
+            crt.drawText(canvas, testStr, testX + (btnW - crt.measureText(testStr, 8)) / 2, editY + crt.dp(14), 8, CRTRenderer.MID);
+            keyTestRects.add(new RectF(testX, editY, testX + btnW, editY + btnH));
+        } else {
+            keyTestRects.add(new RectF());
+        }
+        crt.drawBorderedRect(canvas, editX, editY, btnW, btnH, 0xFF001A00, CRTRenderer.DIM);
+        String editStr = "EDIT";
+        crt.drawText(canvas, editStr, editX + (btnW - crt.measureText(editStr, 8)) / 2, editY + crt.dp(14), 8, CRTRenderer.MID);
+        keyEditRects.add(new RectF(editX, editY, editX + btnW, editY + btnH));
     }
 
     // ─── CTRL PAGE ────────────────────────────────────────────────
 
     private void drawCtrlPage(Canvas canvas, int w, int h, float pad) {
-        float y = pad;
+        float viewH = h;
+        float setupBtnsH = systemSetupExpanded ? crt.dp(36) * 3 + crt.dp(8) * 3 + crt.dp(8) : 0;
+        float contentH = crt.getLineHeight(20) + crt.dp(16) + crt.dp(34) + crt.dp(40)
+            + crt.dp(17) + crt.dp(34) * 3 + crt.dp(8) + crt.dp(17)
+            + crt.dp(36) + crt.dp(8) + crt.dp(36) + crt.dp(12)
+            + crt.dp(17) + crt.dp(30) + setupBtnsH;
+
+        maxScrollY = Math.max(0, contentH - viewH + pad * 2);
+        scrollY = Math.max(0, Math.min(scrollY, maxScrollY));
+
+        float startY = maxScrollY == 0 ? Math.max(pad, (viewH - contentH) / 2) : pad;
+
+        canvas.save();
+        canvas.clipRect(0, 0, w, viewH);
+        canvas.translate(0, -scrollY);
+
+        float y = startY;
 
         crt.drawText(canvas, "CONTROL", (w - crt.measureText("CONTROL", 20)) / 2, y, 20, CRTRenderer.GREEN);
         y += crt.getLineHeight(20) + crt.dp(16);
@@ -290,31 +560,67 @@ public class DashboardView extends View {
         volumeSlider.set(sliderX, y, sliderX + sliderW, y + sliderH);
         y += crt.dp(40);
 
-        // Separator
         crt.drawRect(canvas, pad, y, w - pad * 2, crt.dp(1), 0xFF0A3A0A);
         y += crt.dp(16);
 
-        // Toggle: WiFi
         y = drawToggleRow(canvas, pad, y, w, "WIFI", wifiToggle, wifiRect);
-
-        // Toggle: Flashlight
         y = drawToggleRow(canvas, pad, y, w, "FLASHLIGHT", flashlight, flashRect);
-
-        // Toggle: Server Mode
         y = drawToggleRow(canvas, pad, y, w, "SERVER MODE", serverMode, serverRect);
         y += crt.dp(8);
 
-        // Separator
         crt.drawRect(canvas, pad, y, w - pad * 2, crt.dp(1), 0xFF0A3A0A);
         y += crt.dp(16);
 
-        // Reboot button
+        // Force GC button
         float btnW = w - pad * 2;
         float btnH = crt.dp(36);
+        crt.drawBorderedRect(canvas, pad, y, btnW, btnH, 0xFF001A00, 0xFF116611);
+        String gcStr = "FORCE GC";
+        crt.drawText(canvas, gcStr, (w - crt.measureText(gcStr, 13)) / 2, y + crt.dp(24), 13, CRTRenderer.MID);
+        gcRect.set(pad, y, pad + btnW, y + btnH);
+        y += btnH + crt.dp(8);
+
+        // Reboot button
         crt.drawBorderedRect(canvas, pad, y, btnW, btnH, 0xFF0A0000, 0xFF552222);
         String rebootStr = "REBOOT DEVICE";
         crt.drawText(canvas, rebootStr, (w - crt.measureText(rebootStr, 13)) / 2, y + crt.dp(24), 13, CRTRenderer.RED);
         rebootRect.set(pad, y, pad + btnW, y + btnH);
+        y += btnH + crt.dp(12);
+
+        crt.drawRect(canvas, pad, y, w - pad * 2, crt.dp(1), 0xFF0A3A0A);
+        y += crt.dp(16);
+
+        // System Setup section
+        String setupPrefix = systemSetupExpanded ? "[-]" : "[+]";
+        crt.drawText(canvas, setupPrefix + " SYSTEM SETUP", pad + crt.dp(4), y + crt.dp(20), 11, CRTRenderer.DIM);
+        setupToggleRect.set(pad, y, w - pad, y + crt.dp(30));
+        y += crt.dp(30);
+
+        if (systemSetupExpanded) {
+            y += crt.dp(8);
+            crt.drawBorderedRect(canvas, pad, y, btnW, btnH, 0xFF001A00, 0xFF664400);
+            String debloatStr = "DEBLOAT ANDROID";
+            crt.drawText(canvas, debloatStr, (w - crt.measureText(debloatStr, 12)) / 2, y + crt.dp(24), 12, CRTRenderer.WARN);
+            debloatRect.set(pad, y, pad + btnW, y + btnH);
+            y += btnH + crt.dp(8);
+
+            crt.drawBorderedRect(canvas, pad, y, btnW, btnH, 0xFF001A00, 0xFF664400);
+            String hardenStr = "HARDEN SYSTEM";
+            crt.drawText(canvas, hardenStr, (w - crt.measureText(hardenStr, 12)) / 2, y + crt.dp(24), 12, CRTRenderer.WARN);
+            hardenRect.set(pad, y, pad + btnW, y + btnH);
+            y += btnH + crt.dp(8);
+
+            crt.drawBorderedRect(canvas, pad, y, btnW, btnH, 0xFF001A00, CRTRenderer.DIM);
+            String homeStr = "SET AS HOME";
+            crt.drawText(canvas, homeStr, (w - crt.measureText(homeStr, 12)) / 2, y + crt.dp(24), 12, CRTRenderer.MID);
+            setHomeRect.set(pad, y, pad + btnW, y + btnH);
+        } else {
+            debloatRect.set(0, 0, 0, 0);
+            hardenRect.set(0, 0, 0, 0);
+            setHomeRect.set(0, 0, 0, 0);
+        }
+
+        canvas.restore();
     }
 
     private void drawSlider(Canvas canvas, float x, float y, float w, float h, int pct) {
@@ -352,18 +658,21 @@ public class DashboardView extends View {
             case MotionEvent.ACTION_DOWN:
                 touchDownX = x;
                 touchDownY = y;
+                lastTouchY = y;
                 swipeTracking = true;
                 isDraggingSlider = false;
+                isScrolling = false;
 
-                // Check slider drag start (CTRL page only)
+                // Check slider drag start (CTRL page only, adjust for scroll)
                 if (currentPage == PAGE_CTRL) {
-                    if (brightnessSlider.contains(x, y)) {
+                    float cy = y + scrollY;
+                    if (brightnessSlider.contains(x, cy)) {
                         isDraggingSlider = true;
                         dragTarget = 0;
                         updateSliderValue(x, brightnessSlider);
                         return true;
                     }
-                    if (volumeSlider.contains(x, y)) {
+                    if (volumeSlider.contains(x, cy)) {
                         isDraggingSlider = true;
                         dragTarget = 1;
                         updateSliderValue(x, volumeSlider);
@@ -381,6 +690,34 @@ public class DashboardView extends View {
                     }
                     return true;
                 }
+                // Vertical scroll on KEYS page (with pull-to-refresh)
+                if (currentPage == PAGE_KEYS) {
+                    float deltaY = lastTouchY - y;
+                    if (Math.abs(deltaY) > crt.dp(4)) isScrolling = true;
+                    if (isScrolling) {
+                        if (scrollY == 0 && deltaY < 0 || pullDistance > 0) {
+                            pullDistance = Math.min(crt.dp(100), pullDistance + (-deltaY));
+                            if (pullDistance < 0) pullDistance = 0;
+                            pullTriggered = pullDistance > crt.dp(60);
+                        } else {
+                            pullDistance = 0;
+                            pullTriggered = false;
+                            scrollY = Math.max(0, Math.min(maxScrollY, scrollY + deltaY));
+                        }
+                        lastTouchY = y;
+                        invalidate();
+                    }
+                }
+                // Vertical scroll on CTRL page
+                if (currentPage == PAGE_CTRL && maxScrollY > 0) {
+                    float deltaY = lastTouchY - y;
+                    if (Math.abs(deltaY) > crt.dp(4)) isScrolling = true;
+                    if (isScrolling) {
+                        scrollY = Math.max(0, Math.min(maxScrollY, scrollY + deltaY));
+                        lastTouchY = y;
+                        invalidate();
+                    }
+                }
                 return true;
 
             case MotionEvent.ACTION_UP:
@@ -389,6 +726,16 @@ public class DashboardView extends View {
                     if (dragTarget == 0 && listener != null) listener.onBrightnessChanged(brightness);
                     if (dragTarget == 1 && listener != null) listener.onVolumeChanged(volume);
                     dragTarget = -1;
+                    return true;
+                }
+                if (isScrolling) {
+                    isScrolling = false;
+                    if (pullTriggered && currentPage == PAGE_KEYS) {
+                        if (listener != null) listener.onKeysRefresh();
+                    }
+                    pullDistance = 0;
+                    pullTriggered = false;
+                    invalidate();
                     return true;
                 }
 
@@ -400,10 +747,12 @@ public class DashboardView extends View {
                 if (absDx > crt.dp(80) && absDx > absDy * 1.5f) {
                     if (dx < 0 && currentPage < 3) {
                         currentPage++;
+                        scrollY = 0; // reset scroll on page change
                         if (listener != null) listener.onPageChanged(currentPage);
                         invalidate();
                     } else if (dx > 0 && currentPage > 0) {
                         currentPage--;
+                        scrollY = 0;
                         if (listener != null) listener.onPageChanged(currentPage);
                         invalidate();
                     }
@@ -432,43 +781,77 @@ public class DashboardView extends View {
     }
 
     private void handleTap(float x, float y) {
-        // CTRL page taps
+        // CTRL page taps (adjust for scroll offset)
         if (currentPage == PAGE_CTRL) {
-            if (wifiRect.contains(x, y)) {
+            float sy = y + scrollY;
+            if (wifiRect.contains(x, sy)) {
                 wifiToggle = !wifiToggle;
                 if (listener != null) listener.onWifiToggle(wifiToggle);
                 invalidate();
                 return;
             }
-            if (flashRect.contains(x, y)) {
+            if (flashRect.contains(x, sy)) {
                 flashlight = !flashlight;
                 if (listener != null) listener.onFlashlightToggle(flashlight);
                 invalidate();
                 return;
             }
-            if (serverRect.contains(x, y)) {
+            if (serverRect.contains(x, sy)) {
                 serverMode = !serverMode;
                 if (listener != null) listener.onServerModeToggle(serverMode);
                 invalidate();
                 return;
             }
-            if (rebootRect.contains(x, y)) {
+            if (gcRect.contains(x, sy)) {
+                if (listener != null) listener.onForceGC();
+                return;
+            }
+            if (rebootRect.contains(x, sy)) {
                 if (listener != null) listener.onReboot();
                 return;
             }
+            if (setupToggleRect.contains(x, sy)) {
+                systemSetupExpanded = !systemSetupExpanded;
+                invalidate();
+                return;
+            }
+            if (systemSetupExpanded) {
+                if (debloatRect.contains(x, sy)) { if (listener != null) listener.onDebloat(); return; }
+                if (hardenRect.contains(x, sy)) { if (listener != null) listener.onHarden(); return; }
+                if (setHomeRect.contains(x, sy)) { if (listener != null) listener.onSetHome(); return; }
+            }
         }
 
-        // KEYS page taps
+        // KEYS page taps (adjust for scroll offset — rects are in content coordinates)
         if (currentPage == PAGE_KEYS) {
+            float sy = y + scrollY;
+            // Search clear button (check first, overlaps search bar)
+            if (!keyFilter.isEmpty() && searchClearRect.contains(x, sy)) {
+                keyFilter = "";
+                scrollY = 0;
+                invalidate();
+                return;
+            }
+            // Search bar tap
+            if (searchBarRect.contains(x, sy)) {
+                if (listener != null) listener.onKeySearch(keyFilter);
+                return;
+            }
             for (int i = 0; i < keyEditRects.size(); i++) {
-                if (keyEditRects.get(i).contains(x, y) && i < keys.size()) {
-                    if (listener != null) listener.onKeyEdit(keys.get(i).name);
+                if (keyEditRects.get(i).contains(x, sy) && i < displayedKeys.size()) {
+                    if (listener != null) listener.onKeyEdit(displayedKeys.get(i).name);
                     return;
                 }
             }
             for (int i = 0; i < keyTestRects.size(); i++) {
-                if (keyTestRects.get(i).contains(x, y) && i < keys.size() && keys.get(i).set) {
-                    if (listener != null) listener.onKeyTest(keys.get(i).name);
+                if (keyTestRects.get(i).contains(x, sy) && i < displayedKeys.size() && displayedKeys.get(i).set) {
+                    if (listener != null) listener.onKeyTest(displayedKeys.get(i).name);
+                    return;
+                }
+            }
+            for (int i = 0; i < moduleToggleRects.size(); i++) {
+                if (moduleToggleRects.get(i).contains(x, sy)) {
+                    if (listener != null) listener.onModuleToggle(moduleToggleIds.get(i), moduleToggleEnable.get(i));
                     return;
                 }
             }
