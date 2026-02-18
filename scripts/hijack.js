@@ -1454,7 +1454,8 @@ _getStatus = function() {
   var s = _origGetStatus();
   s.serverMode = _serverMode;
   var pm = process.memoryUsage();
-  s.heap = { used: Math.round(pm.heapUsed / 1048576), limit: Math.round(require("v8").getHeapStatistics().heap_size_limit / 1048576) };
+  var hs = _v8.getHeapStatistics();
+  s.heap = { used: Math.round(pm.heapUsed / 1048576), limit: Math.round(hs.heap_size_limit / 1048576) };
   return s;
 };
 
