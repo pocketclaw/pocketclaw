@@ -284,8 +284,41 @@ Crons:    2 active
 ### Prerequisites
 
 - An Android 5+ phone (any brand, any condition)
+- A USB cable to connect the phone to your PC
 - WiFi connection
+- ADB installed on your PC ([Android SDK Platform Tools](https://developer.android.com/tools/releases/platform-tools))
 - 10 minutes of patience (30 min on 1GB RAM devices)
+
+### Step 0 — Enable USB Debugging on the phone
+
+USB Debugging lets your PC send commands to the phone via ADB. This is a **one-time setup**.
+
+**Enable Developer Options:**
+1. Open **Settings** on the phone
+2. Go to **About phone** (usually at the bottom)
+3. Find **Build number** — tap it **7 times** rapidly
+4. You'll see a toast message: *"You are now a developer!"*
+
+**Enable USB Debugging:**
+1. Go back to **Settings**
+2. A new menu **Developer options** has appeared (usually above or below "About phone")
+3. Open **Developer options**
+4. Toggle **USB debugging** → ON
+5. Confirm the security prompt
+
+**Connect and authorize:**
+1. Plug the phone into your PC with a USB cable
+2. A popup appears on the phone: *"Allow USB debugging?"*
+3. Check **"Always allow from this computer"** and tap **OK**
+4. On your PC, verify the connection:
+   ```bash
+   adb devices
+   # Should show your device as "device" (not "unauthorized")
+   ```
+
+> **If `adb devices` shows "unauthorized"**: unplug the cable, revoke USB debugging authorizations in Developer options, plug back in, and accept the popup again.
+>
+> **If no popup appears**: try a different USB cable (some cables are charge-only), or toggle USB debugging off and on again.
 
 ### Step 1 — Install Termux
 
