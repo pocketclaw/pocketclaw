@@ -1,20 +1,20 @@
-# PocketClaw — Topo complet des travaux
+# PocketClaw — Complete Overview of the Work Done
 
-## Vue d'ensemble
+## Overview
 
-**PocketClaw** transforme un Moto E2 4G LTE (XT1524, 1 GB RAM, Android 6.0, Snapdragon 410)
-en serveur AI autonome via OpenClaw, avec un launcher Canvas natif.
+**PocketClaw** turns a Moto E2 4G LTE (XT1524, 1 GB RAM, Android 6.0, Snapdragon 410)
+into a self-contained AI server powered by OpenClaw, with a native Canvas launcher.
 
-**Repo GitHub** : `pocketclaw/pocketclaw`
+**GitHub repo**: `pocketclaw/pocketclaw`
 
 ---
 
-## 1. Architecture actuelle (v8 — Native Gateway)
+## 1. Current Architecture (v8 — Native Gateway)
 
 ```
-[PC Windows] ←→ ADB/SSH ←→ [Moto E2]
+[Windows PC] ←→ ADB/SSH ←→ [Moto E2]
      |                          |
-  Electron Desktop         Termux (natif)
+  Electron Desktop         Termux (native)
   (monitoring/setup)           |
                           node22-icu (58 MB, NDK r26c)
                                |
@@ -25,11 +25,11 @@ en serveur AI autonome via OpenClaw, avec un launcher Canvas natif.
                           + Telegram Bot (@pocketclawbot)
 ```
 
-**Stack natif** : Termux → bash → node22-icu → gateway (4 couches, était 6 avec proot)
+**Native stack**: Termux → bash → node22-icu → gateway (4 layers, was 6 with proot)
 
 ---
 
-## 2. Historique des commits (chronologique)
+## 2. Commit History (chronological)
 
 | Commit | Description |
 |--------|-------------|
@@ -70,19 +70,19 @@ en serveur AI autonome via OpenClaw, avec un launcher Canvas natif.
 
 ---
 
-## 3. Composants principaux
+## 3. Main Components
 
-### 3.1 Launcher Android (APK natif)
+### 3.1 Android Launcher (native APK)
 
-**Fichiers** : `apk/src/com/pocketclaw/launcher/`
+**Files**: `apk/src/com/pocketclaw/launcher/`
 
-| Fichier | Rôle |
-|---------|------|
-| `LauncherActivity.java` | Activité principale, 4 onglets (STATUS/LOGS/KEYS/CTRL), polling API, implémente ControlListener |
-| `DashboardView.java` | Vue Canvas custom, rendu CRT terminal vert, tout dessiné à la main |
-| `CRTRenderer.java` | Primitives de dessin — drawBar, drawBorderedRect, drawText, couleurs CRT |
+| File | Role |
+|------|------|
+| `LauncherActivity.java` | Main activity, 4 tabs (STATUS/LOGS/KEYS/CTRL), API polling, implements ControlListener |
+| `DashboardView.java` | Custom Canvas view, green CRT terminal rendering, everything hand-drawn |
+| `CRTRenderer.java` | Drawing primitives — drawBar, drawBorderedRect, drawText, CRT colors |
 
-**Build chain** (sans Android Studio) :
+**Build chain** (without Android Studio):
 ```
 javac -source 1.8 -target 1.8 -classpath android.jar
   → d8 --min-api 23
@@ -91,188 +91,188 @@ javac -source 1.8 -target 1.8 -classpath android.jar
   → java -jar apksigner.jar sign --ks debug.keystore
 ```
 
-**Caractéristiques** :
-- 4 onglets : STATUS (TextViews), LOGS/KEYS/CTRL (Canvas DashboardView)
-- Polling `/api/status` toutes les 5s
-- Sliders hardware (WiFi, Bluetooth, screen brightness, volume)
-- Parsing JSON manuel (indexOf + substring, pas de Gson)
-- RSS : ~55 MB (pas de WebView)
+**Features**:
+- 4 tabs: STATUS (TextViews), LOGS/KEYS/CTRL (Canvas DashboardView)
+- Polls `/api/status` every 5s
+- Hardware sliders (WiFi, Bluetooth, screen brightness, volume)
+- Manual JSON parsing (indexOf + substring, no Gson)
+- RSS: ~55 MB (no WebView)
 
-### 3.2 Améliorations UX v4.0
+### 3.2 UX Improvements v4.0
 
-#### Session 1 — 8 features de base
+#### Session 1 — 8 core features
 
-| # | Feature | Page | Détails |
+| # | Feature | Page | Details |
 |---|---------|------|---------|
-| 1 | **Search bar** | KEYS | Filtre les clés par nom, bordered rect avec placeholder, bouton clear, compteur |
-| 2 | **Force GC** | CTRL | Bouton POST `/api/control/gc`, affiche MB libérés en Toast |
-| 3 | **Category headers** | KEYS | PROVIDERS / CHANNELS / OTHER basé sur le type de module |
-| 4 | **V8 Heap monitor** | LOGS | Barre `V8 HEAP: X/YMB` avec drawBar() + pourcentage |
-| 5 | **Pull-to-refresh** | KEYS | Tire vers le bas → fetchKeys + fetchModules, indicateur visuel |
-| 6 | **System Setup** | CTRL | Section collapsible avec boutons DEBLOAT / HARDEN / SET AS HOME |
-| 7 | **Scroll indicator** | KEYS | Fine barre verte sur la droite |
-| 8 | **Lazy loading info** | LOGS | Ligne `LAZY: X/Y loaded DEAD: Z` |
+| 1 | **Search bar** | KEYS | Filters keys by name, bordered rect with placeholder, clear button, counter |
+| 2 | **Force GC** | CTRL | Button POSTs `/api/control/gc`, shows freed MB as a Toast |
+| 3 | **Category headers** | KEYS | PROVIDERS / CHANNELS / OTHER based on module type |
+| 4 | **V8 Heap monitor** | LOGS | `V8 HEAP: X/YMB` bar with drawBar() + percentage |
+| 5 | **Pull-to-refresh** | KEYS | Pull down → fetchKeys + fetchModules, visual indicator |
+| 6 | **System Setup** | CTRL | Collapsible section with DEBLOAT / HARDEN / SET AS HOME buttons |
+| 7 | **Scroll indicator** | KEYS | Thin green bar on the right edge |
+| 8 | **Lazy loading info** | LOGS | `LAZY: X/Y loaded DEAD: Z` line |
 
 #### Session 2 — v4.0 (CRT animations, backend, polish)
 
-**Bugfixes (A1-A7)** :
-- A1: `onResume()` condition inversée corrigée (server mode)
+**Bugfixes (A1-A7)**:
+- A1: Inverted `onResume()` condition fixed (server mode)
 - A2: Footer "PROOT" → "NATIVE", heap 150 → 112
-- A3: `telegram: true` → check dynamique du module + token
-- A4: JSON escaping dans `onKeyEdit()` et `onModuleToggle()`
-- A5: Parsing `"set":` offset corrigé
-- A6: `nextCrabFrame()` activé dans le timer
-- A7: Versions synchronisées à v4.0 partout (manifest, boot lines, comments)
+- A3: `telegram: true` → dynamic check of module + token
+- A4: JSON escaping in `onKeyEdit()` and `onModuleToggle()`
+- A5: `"set":` parsing offset fixed
+- A6: `nextCrabFrame()` enabled in the timer
+- A7: Versions synchronized to v4.0 everywhere (manifest, boot lines, comments)
 
-**UX critique (B1-B4)** :
-- B1: **Animations CRT activées** — `crt.tick(dt)`, `drawScanBeam()`, `drawGlowText()` pour titres, `postInvalidateDelayed(33)` pour 30fps
-- B2: **Scroll LOGS** — scroll vertical + pull-to-refresh sur la page LOGS
-- B3: **Mini-status bar** — `RAM xxx/yyy • BAT% • UP time • GW● TG● KI●` en haut de chaque page
-- B4: **RESTART GATEWAY** — bouton sur CTRL + endpoint POST `/api/control/restart`
+**Critical UX (B1-B4)**:
+- B1: **CRT animations enabled** — `crt.tick(dt)`, `drawScanBeam()`, `drawGlowText()` for titles, `postInvalidateDelayed(33)` for 30fps
+- B2: **LOGS scrolling** — vertical scroll + pull-to-refresh on the LOGS page
+- B3: **Mini status bar** — `RAM xxx/yyy • BAT% • UP time • GW● TG● KI●` at the top of every page
+- B4: **RESTART GATEWAY** — button on CTRL + POST `/api/control/restart` endpoint
 
-**UX polish (B5-B8)** :
-- B5: **Flash feedback** — overlay vert 150ms au tap sur les boutons
-- B6: **Slider thumb** — indicateur vertical blanc sur les sliders
-- B7: **Filtres LOGS** — boutons `[ALL] [ERR] [WARN]` en haut de LOGS
-- B8: **RAM timeline** — mini line chart (ring buffer 60 points, 5 min d'historique)
+**UX polish (B5-B8)**:
+- B5: **Flash feedback** — 150ms green overlay on button tap
+- B6: **Slider thumb** — white vertical indicator on sliders
+- B7: **LOGS filters** — `[ALL] [ERR] [WARN]` buttons at the top of LOGS
+- B8: **RAM timeline** — mini line chart (60-point ring buffer, 5 min history)
 
-**Backend hijack.js (C1-C7)** :
-- C1: `POST /api/control/restart` — `process.exit(0)` (wrapper relance)
-- C2: **Auth token** — `X-PocketClaw-Token` header ou `?token=` param, lu depuis `POCKETCLAW_TOKEN` env
-- C4: `GET /api/logs?level=error|warn` — filtrage côté serveur
-- C5: `GET /api/logs/stream` — SSE temps réel
-- C6: `POST /api/logs/clear` — vider le buffer
-- C7: `GET /api/history` — ring buffer 60 entries (30s interval, 30 min d'historique RAM/heap/RSS)
+**Backend hijack.js (C1-C7)**:
+- C1: `POST /api/control/restart` — `process.exit(0)` (wrapper restarts)
+- C2: **Auth token** — `X-PocketClaw-Token` header or `?token=` param, read from `POCKETCLAW_TOKEN` env
+- C4: `GET /api/logs?level=error|warn` — server-side filtering
+- C5: `GET /api/logs/stream` — real-time SSE
+- C6: `POST /api/logs/clear` — flush the buffer
+- C7: `GET /api/history` — 60-entry ring buffer (30s interval, 30 min RAM/heap/RSS history)
 
-**Fichiers modifiés (cumul sessions 1+2)** :
-- `DashboardView.java` : 627 → ~960 lignes (+330)
-- `LauncherActivity.java` : 1052 → ~1280 lignes (+228)
-- `CRTRenderer.java` : 270 → 307 lignes (+37, drawLineChart)
-- `hijack.js` : ~1613 → ~1700 lignes (+87, auth + endpoints + history)
+**Modified files (sessions 1+2 combined)**:
+- `DashboardView.java`: 627 → ~960 lines (+330)
+- `LauncherActivity.java`: 1052 → ~1280 lines (+228)
+- `CRTRenderer.java`: 270 → 307 lines (+37, drawLineChart)
+- `hijack.js`: ~1613 → ~1700 lines (+87, auth + endpoints + history)
 
 ### 3.3 hijack.js (Node.js gateway hijacker)
 
-**Chemin téléphone** : `$ROOTFS/root/hijack.js` (chargé via `-r $HIJACK`)
+**Path on phone**: `$ROOTFS/root/hijack.js` (loaded via `-r $HIJACK`)
 
-**Fonctionnalités** :
-- Monkey-patch `os.networkInterfaces()` (retourne WiFi gateway)
+**Capabilities**:
+- Monkey-patches `os.networkInterfaces()` (returns WiFi gateway)
 - Force GC via `--expose-gc`
-- Dashboard CRT vert sur `:9003/dashboard`
-- `/api/status` : RAM, uptime, modules, keys, battery, lazy stats, telegram status dynamique
-- V8 heap data : `heap.used` / `heap.limit`
+- Green CRT dashboard on `:9003/dashboard`
+- `/api/status`: RAM, uptime, modules, keys, battery, lazy stats, dynamic telegram status
+- V8 heap data: `heap.used` / `heap.limit`
 - `/proc` RAM breakdown
-- **Auth token** : `X-PocketClaw-Token` / `?token=` (v4.0)
-- **Restart endpoint** : `POST /api/control/restart` (v4.0)
-- **Log filtering** : `GET /api/logs?level=error|warn` (v4.0)
-- **SSE streaming** : `GET /api/logs/stream` (v4.0)
-- **History** : `GET /api/history` — ring buffer RAM/heap/RSS (v4.0)
-- **Log clear** : `POST /api/logs/clear` (v4.0)
+- **Auth token**: `X-PocketClaw-Token` / `?token=` (v4.0)
+- **Restart endpoint**: `POST /api/control/restart` (v4.0)
+- **Log filtering**: `GET /api/logs?level=error|warn` (v4.0)
+- **SSE streaming**: `GET /api/logs/stream` (v4.0)
+- **History**: `GET /api/history` — RAM/heap/RSS ring buffer (v4.0)
+- **Log clear**: `POST /api/logs/clear` (v4.0)
 
-### 3.4 Scripts système (téléphone)
+### 3.4 System Scripts (phone)
 
-| Script | Emplacement | Rôle |
-|--------|-------------|------|
-| `start-openclaw` | `$PREFIX/bin/` | Lance le gateway avec NODE_OPTIONS |
-| `restart-gw` | `$PREFIX/bin/` | Kill + restart gateway proprement |
-| `pocketclaw` | `$PREFIX/bin/` | Commande principale |
+| Script | Location | Role |
+|--------|----------|------|
+| `start-openclaw` | `$PREFIX/bin/` | Starts the gateway with NODE_OPTIONS |
+| `restart-gw` | `$PREFIX/bin/` | Cleanly kills + restarts the gateway |
+| `pocketclaw` | `$PREFIX/bin/` | Main CLI command |
 | `start-pocketclaw.sh` | `~/.termux/boot/` | Auto-boot (sshd + crons + monitor + gateway) |
 | `stop-daemons.sh` | `/data/local/tmp/` | Daemon stopper + kernel tuning (ADB only) |
 | `pocketclaw-boot.ps1` | `%USERPROFILE%\` | Windows auto-boot (ADB → daemon stopper → port forwarding) |
 
-### 3.6 Compat shims (natif ARM32)
+### 3.6 Compat Shims (native ARM32)
 
-| Composant | Taille | Rôle |
-|-----------|--------|------|
+| Component | Size | Role |
+|-----------|------|------|
 | `node22-icu` | 58 MB | Node.js 22, NDK r26c, API 24, small-icu |
-| `libapi23compat.so` | 8.4 KB | LD_PRELOAD — 11 symbols API 24 manquants |
-| `libc++_shared.so` | remplacé | NDK r26c version (C++17 filesystem) |
+| `libapi23compat.so` | 8.4 KB | LD_PRELOAD — 11 missing API 24 symbols |
+| `libc++_shared.so` | replaced | NDK r26c version (C++17 filesystem) |
 
-**Symbols shimmés** : in6addr_any, in6addr_loopback, __emutls_get_address, getifaddrs, freeifaddrs, getgrnam_r, getgrgid_r, fseeko64, ftello64, pthread_barrier_{init,wait,destroy}
+**Shimmed symbols**: in6addr_any, in6addr_loopback, __emutls_get_address, getifaddrs, freeifaddrs, getgrnam_r, getgrgid_r, fseeko64, ftello64, pthread_barrier_{init,wait,destroy}
 
 ---
 
-## 4. Optimisations RAM
+## 4. RAM Optimizations
 
-### Évolution
+### Progression
 
-| Version | RAM totale | Changement clé |
-|---------|-----------|----------------|
+| Version | Total RAM | Key change |
+|---------|-----------|------------|
 | v1 (proot) | ~500 MB+ | Ubuntu proot + Node 18 |
 | v5 | ~393 MB | Debloat v6, 13 packages |
-| v7 | ~310 MB | **Proot éliminé**, node22-icu natif |
-| v8 (actuel) | **~321 MB** | Heap 112 MB, lazy loading v3, daemon stopper |
+| v7 | ~310 MB | **Proot eliminated**, native node22-icu |
+| v8 (current) | **~321 MB** | Heap 112 MB, lazy loading v3, daemon stopper |
 
-### Détail RAM actuel
+### Current RAM Breakdown
 
-| Composant | RAM |
+| Component | RAM |
 |-----------|-----|
 | Gateway (node22-icu) | ~155 MB (heap 112, live 105) |
 | system_server | ~97 MB |
 | zygote | ~63 MB |
 | PocketClaw Launcher | ~55 MB |
-| Autres Android | ~variable |
+| Other Android | ~varies |
 | **Total** | **~321 MB** |
 
-### Techniques appliquées
+### Techniques Applied
 
-- **V8** : `--max-old-space-size=112 --max-semi-space-size=2`
-- **Threads** : `UV_THREADPOOL_SIZE=1`
-- **Lazy loading** : Proxy-based, 37 packages interceptables, ~8 chargés on-demand
-- **Dead stubs** : 23 modules bloqués au require()
-- **Debloat** : 64+ packages Android désactivés, 13 restants
-- **Daemon stopper** : 6 daemons tués (drmserver, qcamerasvr, audiod, media, ppd, atfwd)
-- **Kernel tuning** : vfs_cache_pressure=500, min_free_kbytes=2048, drop_caches=3
-- **Dirty COW** : Two-phase (post_boot.sh + app_process32) pour sysctl + daemon kill
-
----
-
-## 5. Sécurité / Dirty COW
-
-- **Exploit** : Dirty COW (CVE-2016-5195) sur kernel 3.10.49
-- **Usage** : Écrit post_boot.sh (sysctl) et app_process32 (payload) via race condition
-- **Limitation** : Fonctionne uniquement depuis `adb shell` (SELinux bloque untrusted_app)
-- **Binaires** : `$PREFIX/bin/{dirtycow,payload,run-as-payload}`
+- **V8**: `--max-old-space-size=112 --max-semi-space-size=2`
+- **Threads**: `UV_THREADPOOL_SIZE=1`
+- **Lazy loading**: Proxy-based, 37 interceptable packages, ~8 loaded on-demand
+- **Dead stubs**: 23 modules blocked at require()
+- **Debloat**: 64+ Android packages disabled, 13 remaining
+- **Daemon stopper**: 6 daemons killed (drmserver, qcamerasvr, audiod, media, ppd, atfwd)
+- **Kernel tuning**: vfs_cache_pressure=500, min_free_kbytes=2048, drop_caches=3
+- **Dirty COW**: Two-phase (post_boot.sh + app_process32) for sysctl + daemon kill
 
 ---
 
-## 6. État actuel et problèmes connus
+## 5. Security / Dirty COW
 
-### Fonctionnel (v4.0)
-- Gateway native (pas de proot)
-- Dashboard CRT sur :9003 (4 pages)
-- Telegram bot connecté
+- **Exploit**: Dirty COW (CVE-2016-5195) on kernel 3.10.49
+- **Usage**: Writes post_boot.sh (sysctl) and app_process32 (payload) via race condition
+- **Limitation**: Only works from `adb shell` (SELinux blocks untrusted_app)
+- **Binaries**: `$PREFIX/bin/{dirtycow,payload,run-as-payload}`
+
+---
+
+## 6. Current State and Known Issues
+
+### Working (v4.0)
+- Native gateway (no proot)
+- CRT dashboard on :9003 (4 pages)
+- Telegram bot connected
 - Auto-boot gateway via Termux Boot
-- Launcher Canvas 4 onglets avec animations CRT 30fps
-- Desktop Electron (commité)
-- Clavier Google restauré (libjni_keyboarddecoder.so fix)
-- Auth token sur les endpoints sensibles
-- SSE streaming des logs
-- Historique RAM/heap/RSS (30 min)
-- Mini-status bar sur chaque page
-- Scroll + filtres sur LOGS
-- Restart gateway depuis CTRL
-- CI GitHub Actions (Java + JS syntax check)
+- 4-tab Canvas launcher with 30fps CRT animations
+- Electron desktop app (committed)
+- Google keyboard restored (libjni_keyboarddecoder.so fix)
+- Auth token on sensitive endpoints
+- SSE log streaming
+- RAM/heap/RSS history (30 min)
+- Mini status bar on every page
+- Scrolling + filters on LOGS
+- Restart gateway from CTRL
+- GitHub Actions CI (Java + JS syntax check)
 
-### TODO restant
-- Register `pocketclaw-boot.ps1` en Scheduled Task Windows
-- Supprimer le rootfs proot (~967 MB à récupérer)
-- Déployer fallback Groq (besoin GROQ_API_KEY)
-- Fix conflit Telegram "/status"
-- Considérer postmarketOS (seule voie vers < 250 MB)
+### Remaining TODO
+- Register `pocketclaw-boot.ps1` as a Windows Scheduled Task
+- Delete the proot rootfs (~967 MB to reclaim)
+- Deploy Groq fallback (needs GROQ_API_KEY)
+- Fix Telegram "/status" conflict
+- Consider postmarketOS (only path to < 250 MB)
 
 ---
 
-## 7. Fichiers clés — Arborescence
+## 7. Key Files — Directory Tree
 
 ```
 pocketclaw/
-├── apk/                          # Launcher Android
+├── apk/                          # Android Launcher
 │   ├── AndroidManifest.xml
-│   ├── build/                    # APK compilé
+│   ├── build/                    # Compiled APK
 │   └── src/com/pocketclaw/launcher/
-│       ├── LauncherActivity.java # Activité + ControlListener
-│       ├── DashboardView.java    # Canvas CRT custom
-│       └── CRTRenderer.java      # Primitives dessin
+│       ├── LauncherActivity.java # Activity + ControlListener
+│       ├── DashboardView.java    # Custom CRT Canvas
+│       └── CRTRenderer.java      # Drawing primitives
 ├── scripts/
 │   ├── hijack.js                # Gateway monkey-patch (canonical — deploy from here)
 │   ├── pocketclaw.sh            # CLI: start/stop/restart/status/logs/monitor/gc/modules/heap
@@ -294,4 +294,4 @@ pocketclaw/
 
 ---
 
-*Mis à jour le 2026-02-18 — PocketClaw v4.0 Native Gateway*
+*Last updated 2026-02-18 — PocketClaw v4.0 Native Gateway*

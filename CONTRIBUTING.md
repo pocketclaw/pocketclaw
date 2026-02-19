@@ -17,7 +17,7 @@ This helps us build a compatibility table and improve the guide.
 
 ### Found a better hack?
 
-If you found a cleaner solution to any of the [20 hacks](HACKS.md), open a PR! Include:
+If you found a cleaner solution to any of the [55 hacks](HACKS.md), open a PR! Include:
 - Which hack it replaces or improves
 - Why the new approach is better
 - What you tested it on

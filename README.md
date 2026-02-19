@@ -21,9 +21,9 @@
 
 ---
 
-**They said it couldn't be done. 53 hacks later, it's running.**
+**They said it couldn't be done. 55 hacks later, it's running.**
 
-[Setup Guide](#-setup-guide) · [The 53 Hacks](HACKS.md) · [Troubleshooting](#-troubleshooting) · [Contributing](CONTRIBUTING.md)
+[Setup Guide](#-setup-guide) · [The 55 Hacks](HACKS.md) · [Troubleshooting](#-troubleshooting) · [Contributing](CONTRIBUTING.md)
 
 </div>
 
@@ -653,7 +653,7 @@ adb shell monkey -p com.termux.boot -c android.intent.category.LAUNCHER 1
 ```
 pocketclaw/
 ├── README.md                      # You are here
-├── HACKS.md                       # The 53 hacks — the full war story
+├── HACKS.md                       # The 55 hacks — the full war story (how we did it)
 ├── CONTRIBUTING.md                 # How to contribute
 ├── LICENSE                         # MIT
 ├── restore-debloat.sh             # One-script debloat (126 packages + tuning)
@@ -720,7 +720,7 @@ $ROOTFS/root/
 
 ---
 
-## The 53 Hacks
+## The 55 Hacks
 
 Every single problem we hit — and the hack that fixed it. From proot crashes to Dirty COW kernel exploits, from cross-compiling Node.js with NDK to shimming 11 missing API 24 symbols via LD_PRELOAD. From OOM at 96 MB heap to killing Dalvik VMs post-boot for Dalvik-free operation.
 
@@ -761,7 +761,7 @@ MIT — do whatever you want with it.
 
 **Built with stubbornness on a mass of impossible constraints.**
 
-*A phone from 2015. 1GB of RAM. 190 packages debloated. Native Node.js. Dalvik-free. 53 hacks.*<br>
+*A phone from 2015. 1GB of RAM. 190 packages debloated. Native Node.js. Dalvik-free. 55 hacks.*<br>
 *If it can run AI, anything can.*
 
 **[Star this repo](https://github.com/pocketclaw/pocketclaw)** if you think old phones deserve a second life.
