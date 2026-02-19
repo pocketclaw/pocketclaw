@@ -47,9 +47,9 @@ jobs:
       - name: Check hijack.js syntax
         run: node --check scripts/hijack.js
 
-      - name: Check desktop JS files
+      - name: Check other JS files
         run: |
-          for f in desktop/electron/*.js desktop/src/*.js; do
+          for f in scripts/*.js; do
             if [ -f "$f" ]; then
               node --check "$f" && echo "OK: $f" || exit 1
             fi
