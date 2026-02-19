@@ -24,6 +24,7 @@ import android.Manifest;
 import android.content.pm.PackageManager;
 import android.util.Log;
 import android.view.Gravity;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.EditText;
@@ -46,7 +47,7 @@ import java.net.URL;
 import java.util.ArrayList;
 
 /**
- * PocketClaw Launcher v3.0
+ * PocketClaw Launcher v4.0
  *
  * STATUS tab = original TextView layout (proven, readable, 54 MB).
  * LOGS/KEYS/CTRL tabs = Canvas-rendered DashboardView.
@@ -88,6 +89,10 @@ public class LauncherActivity extends Activity implements DashboardView.ControlL
     private boolean serverMode = false;
     private int savedBrightness = 60;
     private PowerManager.WakeLock wakeLock;
+
+    // ─── Floating Home button ────────────────────────────────────
+    private View floatingBtn;
+    private WindowManager windowManager;
 
     // ─── Crab ────────────────────────────────────────────────────
     private static final String[] DEFAULT_CRAB = {
@@ -254,7 +259,7 @@ public class LauncherActivity extends Activity implements DashboardView.ControlL
         statusView.setLineSpacing(0, 1.2f);
         root.addView(statusView);
 
-        TextView ft = mono("V8 150MB \u2022 PROOT \u2022 NODE 22 \u2022 KIMI", 8, 0xFF082A08);
+        TextView ft = mono("V8 112MB \u2022 NATIVE \u2022 NODE 22 \u2022 KIMI", 8, 0xFF082A08);
         ft.setGravity(Gravity.CENTER);
         ft.setPadding(0, (int)(8*d), 0, 0);
         root.addView(ft);
@@ -288,6 +293,9 @@ public class LauncherActivity extends Activity implements DashboardView.ControlL
         if (checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(new String[]{Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.WRITE_EXTERNAL_STORAGE}, 1);
         }
+
+        // Floating Home button (overlay on top of everything)
+        setupFloatingButton();
 
         // First-run check
         if (!new File("/sdcard/pocketclaw-setup-done").exists()) {
@@ -416,6 +424,7 @@ public class LauncherActivity extends Activity implements DashboardView.ControlL
                     } else {
                         dashboard.setGatewayUp(false);
                     }
+                    dashboard.nextCrabFrame();
                     dashboard.refreshView();
                 }
             });
@@ -652,7 +661,7 @@ public class LauncherActivity extends Activity implements DashboardView.ControlL
                     int si = json.indexOf("\"set\":", ne);
                     int nextName = json.indexOf("\"name\":\"", ne + 1);
                     if (si >= 0 && (nextName < 0 || si < nextName)) {
-                        set = json.substring(si + 5, si + 9).contains("true");
+                        set = json.substring(si + 6, si + 10).contains("true");
                     }
 
                     String masked = "";
@@ -858,6 +867,19 @@ public class LauncherActivity extends Activity implements DashboardView.ControlL
     }
 
     @Override
+    public void onRestartGateway() {
+        new AlertDialog.Builder(this)
+            .setTitle("Restart Gateway")
+            .setMessage("Restart the OpenClaw gateway process?")
+            .setPositiveButton("RESTART", (d, w) -> {
+                postToApi("/api/control/restart", "{}");
+                Toast.makeText(this, "Gateway restarting...", Toast.LENGTH_LONG).show();
+            })
+            .setNegativeButton("CANCEL", null)
+            .show();
+    }
+
+    @Override
     public void onReboot() {
         new AlertDialog.Builder(this)
             .setTitle("Reboot Device")
@@ -881,7 +903,8 @@ public class LauncherActivity extends Activity implements DashboardView.ControlL
             .setPositiveButton("SAVE", (d, w) -> {
                 String val = input.getText().toString().trim();
                 if (!val.isEmpty()) {
-                    postToApi("/api/keys", "{\"name\":\"" + name + "\",\"value\":\"" + val + "\"}");
+                    String escaped = val.replace("\\", "\\\\").replace("\"", "\\\"");
+                    postToApi("/api/keys", "{\"name\":\"" + name + "\",\"value\":\"" + escaped + "\"}");
                     handler.postDelayed(this::fetchKeys, 500);
                 }
             })
@@ -912,7 +935,8 @@ public class LauncherActivity extends Activity implements DashboardView.ControlL
 
     @Override
     public void onModuleToggle(String id, boolean enable) {
-        postToApi("/api/modules/toggle", "{\"id\":\"" + id + "\",\"enabled\":" + enable + "}");
+        String escapedId = id.replace("\\", "\\\\").replace("\"", "\\\"");
+        postToApi("/api/modules/toggle", "{\"id\":\"" + escapedId + "\",\"enabled\":" + enable + "}");
         handler.postDelayed(this::fetchModules, 500);
         Toast.makeText(this, enable ? "Enabled (restart needed)" : "Disabled (restart needed)", Toast.LENGTH_SHORT).show();
     }
@@ -1077,12 +1101,91 @@ public class LauncherActivity extends Activity implements DashboardView.ControlL
         }).start();
     }
 
+    // ─── FLOATING HOME BUTTON ────────────────────────────────────
+
+    private void setupFloatingButton() {
+        if (!Settings.canDrawOverlays(this)) {
+            // Request overlay permission
+            Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION);
+            startActivity(intent);
+            return;
+        }
+        windowManager = (WindowManager) getSystemService(WINDOW_SERVICE);
+        float d = getResources().getDisplayMetrics().density;
+        int size = (int)(40 * d);
+
+        // Simple round green button with crab icon
+        TextView btn = new TextView(this);
+        btn.setText("\uD83E\uDD80"); // crab emoji
+        btn.setTextSize(18);
+        btn.setGravity(Gravity.CENTER);
+        btn.setBackgroundColor(0xCC001A00);
+
+        WindowManager.LayoutParams params = new WindowManager.LayoutParams(
+            size, size,
+            WindowManager.LayoutParams.TYPE_PHONE,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+            android.graphics.PixelFormat.TRANSLUCENT);
+        params.gravity = Gravity.BOTTOM | Gravity.RIGHT;
+        params.x = (int)(8 * d);
+        params.y = (int)(60 * d);
+
+        // Draggable + tap = Home
+        btn.setOnTouchListener(new View.OnTouchListener() {
+            private int initX, initY;
+            private float touchX, touchY;
+            private boolean moved;
+            @Override
+            public boolean onTouch(View v, MotionEvent event) {
+                switch (event.getAction()) {
+                    case MotionEvent.ACTION_DOWN:
+                        initX = params.x;
+                        initY = params.y;
+                        touchX = event.getRawX();
+                        touchY = event.getRawY();
+                        moved = false;
+                        return true;
+                    case MotionEvent.ACTION_MOVE:
+                        float dx = event.getRawX() - touchX;
+                        float dy = event.getRawY() - touchY;
+                        if (Math.abs(dx) > 5 || Math.abs(dy) > 5) moved = true;
+                        if (moved) {
+                            params.x = initX - (int) dx;
+                            params.y = initY - (int) dy;
+                            windowManager.updateViewLayout(floatingBtn, params);
+                        }
+                        return true;
+                    case MotionEvent.ACTION_UP:
+                        if (!moved) {
+                            // Tap — go Home
+                            Intent home = new Intent(Intent.ACTION_MAIN);
+                            home.addCategory(Intent.CATEGORY_HOME);
+                            home.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                            startActivity(home);
+                        }
+                        return true;
+                }
+                return false;
+            }
+        });
+
+        floatingBtn = btn;
+        windowManager.addView(floatingBtn, params);
+    }
+
+    private void removeFloatingButton() {
+        if (floatingBtn != null && windowManager != null) {
+            try { windowManager.removeView(floatingBtn); } catch (Exception e) {}
+            floatingBtn = null;
+        }
+    }
+
     // ─── LIFECYCLE ───────────────────────────────────────────────
 
     @Override
     protected void onResume() {
         super.onResume();
-        if (serverMode && new File("/sdcard/pocketclaw-server-mode").exists()) {
+        if (serverMode && !new File("/sdcard/pocketclaw-server-mode").exists()) {
             onServerModeToggle(false);
         }
     }
@@ -1110,6 +1213,7 @@ public class LauncherActivity extends Activity implements DashboardView.ControlL
     protected void onDestroy() {
         super.onDestroy();
         handler.removeCallbacks(fetchTask);
+        removeFloatingButton();
         if (exitReceiver != null) unregisterReceiver(exitReceiver);
         if (wakeLock != null && wakeLock.isHeld()) wakeLock.release();
     }

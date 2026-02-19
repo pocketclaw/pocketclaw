@@ -356,7 +356,7 @@ function _getStatus() {
     swap: { used: 0, total: 0 },
     uptime: "0m",
     lastError: null,
-    telegram: true,
+    telegram: _getModuleStatus(_ALL_MODULES.find(function(m) { return m.id === "telegram"; })) === "active" && !!(process.env.TELEGRAM_BOT_TOKEN),
     kimi: !!(process.env.KIMI_API_KEY || process.env.MOONSHOT_API_KEY),
     procs: _getProcs(),
     logs: _logBuffer.slice(),
@@ -463,7 +463,7 @@ body::after{content:"";position:fixed;inset:0;background:repeating-linear-gradie
 .sf{height:100%;border-radius:1px;background:linear-gradient(90deg,#330,#aa0);transition:width .6s}
 </style></head><body>
 <div class="boot" id="boot">
-<div class="ln">&gt; POCKETCLAW v4.0</div>
+<div class="ln">&gt; POCKETCLAW v4.0 [NATIVE]</div>
 <div class="ln">&gt; GATEWAY .............. <span class="val" id="bs1">---</span></div>
 <div class="ln">&gt; WIFI ................. <span class="val" id="bs2">---</span></div>
 <div class="ln">&gt; TELEGRAM ............. <span class="val" id="bs3">---</span></div>
@@ -500,7 +500,7 @@ body::after{content:"";position:fixed;inset:0;background:repeating-linear-gradie
 <div class="lz" id="lz"></div>
 </div>
 <div class="sp"></div>
-<div class="ft">V8 150MB &#x2022; NATIVE &#x2022; NODE 22</div>
+<div class="ft">V8 112MB &#x2022; NATIVE &#x2022; NODE 22</div>
 </div>
 </div>
 </div>
@@ -1138,6 +1138,18 @@ function _handleModuleToggle(req, res) {
   });
 }
 
+// --- Auth token for API endpoints (C2) ---
+const _AUTH_TOKEN = process.env.POCKETCLAW_TOKEN || "";
+function _checkAuth(req, res) {
+  if (!_AUTH_TOKEN) return true; // no token configured = open access
+  const hdr = req.headers["x-pocketclaw-token"];
+  const url = require("url").parse(req.url, true);
+  if (hdr === _AUTH_TOKEN || url.query.token === _AUTH_TOKEN) return true;
+  res.writeHead(401, { "Content-Type": "application/json" });
+  res.end(JSON.stringify({ ok: false, error: "Unauthorized" }));
+  return false;
+}
+
 // --- Server mode + Control state ---
 let _serverMode = false;
 let _serverModeStarted = 0;
@@ -1260,6 +1272,13 @@ function _handleReboot(req, res) {
       catch (e2) { console.error("[hijack] Reboot failed: " + e2.message); }
     }
   }, 3000);
+}
+
+function _handleRestart(req, res) {
+  res.writeHead(200, { "Content-Type": "application/json" });
+  res.end(JSON.stringify({ ok: true, message: "Gateway restarting in 2s" }));
+  console.log("[hijack] Restart requested — exiting in 2s (wrapper will relaunch)");
+  setTimeout(function() { process.exit(0); }, 2000);
 }
 
 function _handleGC(req, res) {
@@ -1448,6 +1467,28 @@ body:JSON.stringify({id:id,enabled:en})}).then(function(){pollMods();msg(en?"Ena
 poll();setInterval(poll,5000);pollMods();
 </script></body></html>`;
 
+// C7: History ring buffer — RAM, heap, load avg every 30s (last 30 min = 60 entries)
+const _historyBuf = [];
+const _HISTORY_MAX = 60;
+setInterval(function() {
+  try {
+    var mem = process.memoryUsage();
+    var mi = _fs.readFileSync("/proc/meminfo", "utf8");
+    var g = function(k) { var m = mi.match(new RegExp(k + ":\\s+(\\d+)")); return m ? Math.round(+m[1] / 1024) : 0; };
+    var total = g("MemTotal");
+    var avail = g("MemAvailable");
+    var used = avail > 0 ? total - avail : total - g("MemFree") - g("Buffers") - g("Cached");
+    _historyBuf.push({
+      t: Date.now(),
+      ram: used,
+      ramTotal: total,
+      heap: Math.round(mem.heapUsed / 1048576),
+      rss: Math.round(mem.rss / 1048576)
+    });
+    if (_historyBuf.length > _HISTORY_MAX) _historyBuf.shift();
+  } catch (e) {}
+}, 30000);
+
 // Add serverMode + V8 heap to _getStatus response
 var _origGetStatus = _getStatus;
 _getStatus = function() {
@@ -1537,22 +1578,56 @@ _http.Server.prototype.listen = function () {
           res.end(_LOGS);
           return true;
         }
-        if (req.url === "/api/logs" || req.url.indexOf("/api/logs?") === 0) {
+        if ((req.url === "/api/logs" || req.url.indexOf("/api/logs?") === 0) && req.method === "GET") {
+          var logUrl = require("url").parse(req.url, true);
+          var level = logUrl.query.level;
+          var lines = _logBuffer.slice();
+          if (level === "error") lines = lines.filter(function(l) { return l.indexOf("ERROR") > -1 || l.indexOf("!") === 0; });
+          else if (level === "warn") lines = lines.filter(function(l) { return l.indexOf("WARN") > -1; });
           res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
-          res.end(JSON.stringify({ lines: _logBuffer.slice(), lazy: _lazyLog.slice(-20) }));
+          res.end(JSON.stringify({ lines: lines, lazy: _lazyLog.slice(-20) }));
+          return true;
+        }
+        if (req.url === "/api/logs/stream") {
+          res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", "Connection": "keep-alive", "Access-Control-Allow-Origin": "*" });
+          res.write("data: " + JSON.stringify({ type: "init", lines: _logBuffer.slice() }) + "\n\n");
+          var _sseLastLen = _logBuffer.length;
+          var _sseTimer = setInterval(function() {
+            if (_logBuffer.length !== _sseLastLen) {
+              var newLines = _logBuffer.slice(Math.max(0, _sseLastLen));
+              res.write("data: " + JSON.stringify({ type: "update", lines: newLines }) + "\n\n");
+              _sseLastLen = _logBuffer.length;
+            }
+          }, 1000);
+          req.on("close", function() { clearInterval(_sseTimer); });
+          return true;
+        }
+        if (req.url === "/api/logs/clear" && req.method === "POST") {
+          if (!_checkAuth(req, res)) return true;
+          _logBuffer.length = 0;
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ ok: true }));
           return true;
         }
         if (req.url === "/api/keys" && req.method === "GET") {
+          if (!_checkAuth(req, res)) return true;
           res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
           res.end(JSON.stringify(_getKeys()));
           return true;
         }
         if (req.url === "/api/keys" && req.method === "POST") {
+          if (!_checkAuth(req, res)) return true;
           _handleKeySave(req, res);
           return true;
         }
         if (req.url && req.url.indexOf("/api/keys/test") === 0) {
+          if (!_checkAuth(req, res)) return true;
           _handleKeyTest(req, res);
+          return true;
+        }
+        if (req.url === "/api/history") {
+          res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+          res.end(JSON.stringify({ points: _historyBuf, interval: 30 }));
           return true;
         }
         if (req.url === "/api/status" || req.url.indexOf("/api/status?") === 0) {
@@ -1571,14 +1646,22 @@ _http.Server.prototype.listen = function () {
           return true;
         }
         if (req.url === "/api/control/server-mode" && req.method === "POST") {
+          if (!_checkAuth(req, res)) return true;
           _handleServerMode(req, res);
           return true;
         }
         if (req.url === "/api/control/reboot" && req.method === "POST") {
+          if (!_checkAuth(req, res)) return true;
           _handleReboot(req, res);
           return true;
         }
+        if (req.url === "/api/control/restart" && req.method === "POST") {
+          if (!_checkAuth(req, res)) return true;
+          _handleRestart(req, res);
+          return true;
+        }
         if (req.url === "/api/control/gc" && req.method === "POST") {
+          if (!_checkAuth(req, res)) return true;
           _handleGC(req, res);
           return true;
         }

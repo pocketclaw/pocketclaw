@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  check-java:
+    name: Check Java syntax
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 8
+        uses: actions/setup-java@v4
+        with:
+          java-version: '8'
+          distribution: 'temurin'
+
+      - name: Compile launcher (syntax check)
+        run: |
+          # Download Android API 23 stubs for compilation
+          mkdir -p sdk
+          if curl -sfL -o sdk/android.jar \
+            "https://raw.githubusercontent.com/nicholasng1998/android-sdk-stubs/master/android-23/android.jar" 2>/dev/null; then
+            javac -source 1.8 -target 1.8 \
+              -classpath sdk/android.jar \
+              -d build \
+              apk/src/com/pocketclaw/launcher/*.java
+          else
+            echo "::warning::Skipping Java compilation (android.jar stubs unavailable)"
+          fi
+
+  check-js:
+    name: Check JS syntax
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Check hijack.js syntax
+        run: node --check scripts/hijack.js
+
+      - name: Check desktop JS files
+        run: |
+          for f in desktop/electron/*.js desktop/src/*.js; do
+            if [ -f "$f" ]; then
+              node --check "$f" && echo "OK: $f" || exit 1
+            fi
+          done

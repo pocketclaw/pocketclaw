@@ -3,7 +3,7 @@
 ## Vue d'ensemble
 
 **PocketClaw** transforme un Moto E2 4G LTE (XT1524, 1 GB RAM, Android 6.0, Snapdragon 410)
-en serveur AI autonome via OpenClaw, avec un launcher Canvas natif et une app desktop Electron.
+en serveur AI autonome via OpenClaw, avec un launcher Canvas natif.
 
 **Repo GitHub** : `MonteiroRobin/pocketclaw`
 
@@ -98,7 +98,9 @@ javac -source 1.8 -target 1.8 -classpath android.jar
 - Parsing JSON manuel (indexOf + substring, pas de Gson)
 - RSS : ~55 MB (pas de WebView)
 
-### 3.2 Les 8 améliorations UX (session actuelle — NON COMMITÉ)
+### 3.2 Améliorations UX v4.0
+
+#### Session 1 — 8 features de base
 
 | # | Feature | Page | Détails |
 |---|---------|------|---------|
@@ -111,57 +113,62 @@ javac -source 1.8 -target 1.8 -classpath android.jar
 | 7 | **Scroll indicator** | KEYS | Fine barre verte sur la droite |
 | 8 | **Lazy loading info** | LOGS | Ligne `LAZY: X/Y loaded DEAD: Z` |
 
-**Fichiers modifiés** :
-- `DashboardView.java` : +252 lignes (627 → 879)
-- `LauncherActivity.java` : +139 lignes (1052 → 1191)
-- `hijack.js` : +2 lignes (heap data dans `_getStatus`)
+#### Session 2 — v4.0 (CRT animations, backend, polish)
+
+**Bugfixes (A1-A7)** :
+- A1: `onResume()` condition inversée corrigée (server mode)
+- A2: Footer "PROOT" → "NATIVE", heap 150 → 112
+- A3: `telegram: true` → check dynamique du module + token
+- A4: JSON escaping dans `onKeyEdit()` et `onModuleToggle()`
+- A5: Parsing `"set":` offset corrigé
+- A6: `nextCrabFrame()` activé dans le timer
+- A7: Versions synchronisées à v4.0 partout (manifest, boot lines, comments)
+
+**UX critique (B1-B4)** :
+- B1: **Animations CRT activées** — `crt.tick(dt)`, `drawScanBeam()`, `drawGlowText()` pour titres, `postInvalidateDelayed(33)` pour 30fps
+- B2: **Scroll LOGS** — scroll vertical + pull-to-refresh sur la page LOGS
+- B3: **Mini-status bar** — `RAM xxx/yyy • BAT% • UP time • GW● TG● KI●` en haut de chaque page
+- B4: **RESTART GATEWAY** — bouton sur CTRL + endpoint POST `/api/control/restart`
+
+**UX polish (B5-B8)** :
+- B5: **Flash feedback** — overlay vert 150ms au tap sur les boutons
+- B6: **Slider thumb** — indicateur vertical blanc sur les sliders
+- B7: **Filtres LOGS** — boutons `[ALL] [ERR] [WARN]` en haut de LOGS
+- B8: **RAM timeline** — mini line chart (ring buffer 60 points, 5 min d'historique)
+
+**Backend hijack.js (C1-C7)** :
+- C1: `POST /api/control/restart` — `process.exit(0)` (wrapper relance)
+- C2: **Auth token** — `X-PocketClaw-Token` header ou `?token=` param, lu depuis `POCKETCLAW_TOKEN` env
+- C4: `GET /api/logs?level=error|warn` — filtrage côté serveur
+- C5: `GET /api/logs/stream` — SSE temps réel
+- C6: `POST /api/logs/clear` — vider le buffer
+- C7: `GET /api/history` — ring buffer 60 entries (30s interval, 30 min d'historique RAM/heap/RSS)
+
+**Fichiers modifiés (cumul sessions 1+2)** :
+- `DashboardView.java` : 627 → ~960 lignes (+330)
+- `LauncherActivity.java` : 1052 → ~1280 lignes (+228)
+- `CRTRenderer.java` : 270 → 307 lignes (+37, drawLineChart)
+- `hijack.js` : ~1613 → ~1700 lignes (+87, auth + endpoints + history)
 
 ### 3.3 hijack.js (Node.js gateway hijacker)
 
-**Chemin téléphone** : `$PREFIX/lib/node_modules/openclaw/hijack.js` (chargé via `-r`)
+**Chemin téléphone** : `$ROOTFS/root/hijack.js` (chargé via `-r $HIJACK`)
 
 **Fonctionnalités** :
 - Monkey-patch `os.networkInterfaces()` (retourne WiFi gateway)
 - Force GC via `--expose-gc`
 - Dashboard CRT vert sur `:9003/dashboard`
-- `/api/status` : RAM, uptime, modules, keys, battery, lazy stats
-- V8 heap data (ajouté cette session) : `heap.used` / `heap.limit`
+- `/api/status` : RAM, uptime, modules, keys, battery, lazy stats, telegram status dynamique
+- V8 heap data : `heap.used` / `heap.limit`
 - `/proc` RAM breakdown
+- **Auth token** : `X-PocketClaw-Token` / `?token=` (v4.0)
+- **Restart endpoint** : `POST /api/control/restart` (v4.0)
+- **Log filtering** : `GET /api/logs?level=error|warn` (v4.0)
+- **SSE streaming** : `GET /api/logs/stream` (v4.0)
+- **History** : `GET /api/history` — ring buffer RAM/heap/RSS (v4.0)
+- **Log clear** : `POST /api/logs/clear` (v4.0)
 
-### 3.4 Desktop Electron — "PocketClaw 3000"
-
-**Dossier** : `desktop/` (commit `cf36697`)
-
-**Stack** : Electron 31 + electron-builder
-
-**5 onglets Pip-Boy style** :
-| Onglet | Fonction |
-|--------|----------|
-| STAT | Dashboard live — RAM, disk, battery monitoring |
-| DEVICES | Multi-device management, USB + réseau, auto-reconnect |
-| KEYS | Gestion des clés API |
-| SETUP | Setup automatisé en 8 étapes via ADB |
-| TOOLS | Shell ADB interactif, live logs |
-
-**Fichiers principaux** :
-| Fichier | Lignes | Rôle |
-|---------|--------|------|
-| `electron/main.js` | 89 | Process principal Electron |
-| `electron/preload.js` | 48 | Bridge IPC sécurisé |
-| `electron/dashboard-engine.js` | 566 | Monitoring live (polling status) |
-| `electron/setup-engine.js` | 688 | Setup automatisé 8 étapes |
-| `src/app.js` | 702 | Frontend — rendu des onglets |
-| `src/index.html` | 329 | Structure HTML |
-| `src/style.css` | 654 | Thème CRT (5 couleurs) |
-| `scripts/prepare-payload.sh` | 186 | Prépare les binaires pour déploiement |
-
-**Features** :
-- 8 avatars crustacés animés avec sync mobile
-- 5 thèmes CRT (green, amber, blue, white, pink)
-- Cross-platform (Win/Mac/Linux)
-- One-click setup automatisé
-
-### 3.5 Scripts système (téléphone)
+### 3.4 Scripts système (téléphone)
 
 | Script | Emplacement | Rôle |
 |--------|-------------|------|
@@ -170,7 +177,7 @@ javac -source 1.8 -target 1.8 -classpath android.jar
 | `pocketclaw` | `$PREFIX/bin/` | Commande principale |
 | `start-pocketclaw.sh` | `~/.termux/boot/` | Auto-boot (sshd + crons + monitor + gateway) |
 | `stop-daemons.sh` | `/data/local/tmp/` | Daemon stopper + kernel tuning (ADB only) |
-| `pocketclaw-boot.ps1` | `C:\Users\robin\` | Windows auto-boot (ADB → daemon stopper → port forwarding) |
+| `pocketclaw-boot.ps1` | `%USERPROFILE%\` | Windows auto-boot (ADB → daemon stopper → port forwarding) |
 
 ### 3.6 Compat shims (natif ARM32)
 
@@ -230,23 +237,23 @@ javac -source 1.8 -target 1.8 -classpath android.jar
 
 ## 6. État actuel et problèmes connus
 
-### Fonctionnel
+### Fonctionnel (v4.0)
 - Gateway native (pas de proot)
-- Dashboard CRT sur :9003
+- Dashboard CRT sur :9003 (4 pages)
 - Telegram bot connecté
 - Auto-boot gateway via Termux Boot
-- Launcher Canvas 4 onglets
+- Launcher Canvas 4 onglets avec animations CRT 30fps
 - Desktop Electron (commité)
 - Clavier Google restauré (libjni_keyboarddecoder.so fix)
-
-### En attente
-- **Gateway restart nécessaire** — hijack.js pushé mais pas rechargé (PID 19116 = ancienne version)
-- **8 features UX non commitées** — APK déployé sur le téléphone, code non pushé sur GitHub
-- **V8 heap monitor** — ne montrera rien tant que le gateway n'est pas restarté
+- Auth token sur les endpoints sensibles
+- SSE streaming des logs
+- Historique RAM/heap/RSS (30 min)
+- Mini-status bar sur chaque page
+- Scroll + filtres sur LOGS
+- Restart gateway depuis CTRL
+- CI GitHub Actions (Java + JS syntax check)
 
 ### TODO restant
-- Commit + push des 8 features UX
-- Restart gateway pour activer le heap monitor
 - Register `pocketclaw-boot.ps1` en Scheduled Task Windows
 - Supprimer le rootfs proot (~967 MB à récupérer)
 - Déployer fallback Groq (besoin GROQ_API_KEY)
@@ -266,22 +273,12 @@ pocketclaw/
 │       ├── LauncherActivity.java # Activité + ControlListener
 │       ├── DashboardView.java    # Canvas CRT custom
 │       └── CRTRenderer.java      # Primitives dessin
-├── desktop/                      # App Electron "PocketClaw 3000"
-│   ├── electron/
-│   │   ├── main.js              # Process principal
-│   │   ├── preload.js           # Bridge IPC
-│   │   ├── dashboard-engine.js  # Monitoring live
-│   │   └── setup-engine.js      # Setup 8 étapes
-│   ├── src/
-│   │   ├── index.html           # Structure
-│   │   ├── app.js               # Frontend
-│   │   └── style.css            # Thème CRT
-│   └── package.json
 ├── scripts/
-│   ├── hijack.js                # Gateway monkey-patch
-│   ├── boot-debloat.sh
-│   ├── monitor.sh
-│   └── run-proot.sh             # Legacy
+│   ├── hijack.js                # Gateway monkey-patch (canonical — deploy from here)
+│   ├── pocketclaw.sh            # CLI: start/stop/restart/status/logs/monitor/gc/modules/heap
+│   ├── monitor.sh               # Logging stats every 5 min
+│   ├── healthcheck.sh           # Cron: restart gateway if hung
+│   └── boot-debloat.sh          # Legacy debloat script
 ├── tools/
 │   ├── dirtycow.c               # Exploit source
 │   ├── payload.c                # Daemon killer
@@ -297,4 +294,4 @@ pocketclaw/
 
 ---
 
-*Généré le 2026-02-18 — PocketClaw v8 Native Gateway*
+*Mis à jour le 2026-02-18 — PocketClaw v4.0 Native Gateway*

@@ -73,7 +73,7 @@ adb shell 'run-as com.termux sh -c '"'"'export LD_LIBRARY_PATH=/data/data/com.te
 Configurer le WiFi en IP statique élimine le problème DHCP. Via les paramètres Android :
 1. Paramètres → Wi-Fi → Appui long sur le réseau → Modifier le réseau
 2. Options avancées → Paramètres IP → Statique
-3. IP : `192.168.1.14`, Passerelle : `192.168.1.254`, Préfixe : `24`
+3. IP : `<YOUR_PHONE_IP>`, Passerelle : `<YOUR_GATEWAY_IP>`, Préfixe : `24`
 4. DNS 1 : `8.8.8.8`, DNS 2 : `8.8.4.4`
 
 **Fix d'urgence — toggle mode avion (ADB uniquement) :**

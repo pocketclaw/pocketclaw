@@ -22,10 +22,21 @@ while true; do
   rm -f "$ROOTFS/tmp/openclaw/"*.lock 2>/dev/null
   rm -f "$PREFIX/tmp/openclaw/"*.lock 2>/dev/null
 
+  # Auto-import keys from /sdcard/Download/pocketclaw-env (first setup via adb push)
+  DROPFILE="/sdcard/Download/pocketclaw-env"
+  if [ -f "$DROPFILE" ]; then
+    echo "[$(date)] Importing keys from $DROPFILE..."
+    mkdir -p "$OPENCLAW_HOME"
+    cp "$DROPFILE" "$OPENCLAW_HOME/env"
+    chmod 600 "$OPENCLAW_HOME/env"
+    rm -f "$DROPFILE"
+    echo "[$(date)] Keys imported and drop file removed."
+  fi
+
   # Source API keys
   if [ -f "$OPENCLAW_HOME/env" ]; then
     . "$OPENCLAW_HOME/env"
-    export KIMI_API_KEY MOONSHOT_API_KEY TELEGRAM_BOT_TOKEN DISCORD_BOT_TOKEN OPENAI_API_KEY GROQ_API_KEY
+    export KIMI_API_KEY MOONSHOT_API_KEY TELEGRAM_BOT_TOKEN DISCORD_BOT_TOKEN OPENAI_API_KEY GROQ_API_KEY POCKETCLAW_TOKEN
   fi
 
   # Set env for openclaw

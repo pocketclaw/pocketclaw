@@ -117,17 +117,52 @@ case "${1:-help}" in
     fi
     ;;
 
+  gc)
+    echo "Forcing GC..."
+    RESP=$(curl -s -X POST --connect-timeout 3 http://localhost:9000/api/control/gc 2>/dev/null)
+    if echo "$RESP" | grep -q '"ok":true'; then
+      FREED=$(echo "$RESP" | grep -o '"freedMB":[0-9]*' | grep -o '[0-9]*')
+      HEAP=$(echo "$RESP" | grep -o '"heapMB":[0-9]*' | grep -o '[0-9]*')
+      echo "GC freed ${FREED:-?}MB (heap now ${HEAP:-?}MB)"
+    else
+      echo "GC failed: $RESP"
+    fi
+    ;;
+
+  modules)
+    echo "=== Module Status ==="
+    curl -s --connect-timeout 3 http://localhost:9000/api/modules 2>/dev/null | \
+      grep -o '"name":"[^"]*","type":"[^"]*"[^}]*"status":"[^"]*"' | \
+      sed 's/"name":"//;s/","type":"/ [/;s/".*"status":"/] /;s/"//' | \
+      while read line; do echo "  $line"; done
+    ;;
+
+  heap)
+    echo "=== V8 Heap ==="
+    curl -s --connect-timeout 3 http://localhost:9000/api/heap 2>/dev/null | \
+      python3 -m json.tool 2>/dev/null || \
+      curl -s --connect-timeout 3 http://localhost:9000/api/heap 2>/dev/null
+    ;;
+
   help|*)
     echo "PocketClaw — AI agent on a phone"
     echo
     echo "Usage: pocketclaw <command>"
     echo
     echo "Commands:"
-    echo "  start     Start the gateway"
-    echo "  stop      Stop the gateway"
-    echo "  restart   Clean restart"
-    echo "  status    System stats (RAM, CPU, battery, gateway)"
-    echo "  logs [n]  Show last n gateway log lines (default 30)"
-    echo "  monitor [n]  Show last n monitor entries (default 10)"
+    echo "  start       Start the gateway"
+    echo "  stop        Stop the gateway"
+    echo "  restart     Clean restart"
+    echo "  status      System stats (RAM, CPU, battery, gateway)"
+    echo "  logs [n]    Show last n gateway log lines (default 30)"
+    echo "  monitor [n] Show last n monitor entries (default 10)"
+    echo "  gc          Force V8 garbage collection"
+    echo "  modules     List module status (active/lazy/dead)"
+    echo "  heap        Show V8 heap details"
+    echo
+    echo "First setup:"
+    echo "  From PC: ./tools/setup-keys.sh     (interactive key setup via ADB)"
+    echo "  Or:      adb push env /sdcard/Download/pocketclaw-env"
+    echo "           pocketclaw restart         (auto-imports on start)"
     ;;
 esac

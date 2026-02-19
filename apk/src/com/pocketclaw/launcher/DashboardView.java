@@ -90,6 +90,24 @@ public class DashboardView extends View {
     private boolean flashlight = false;
     private boolean systemSetupExpanded = false;
 
+    // B5: Button feedback (flash green 150ms on tap)
+    private long flashUntil = 0;
+    private RectF flashRect = null;
+
+    // B7: Log filter (0=ALL, 1=ERR, 2=WARN)
+    private int logFilter = 0;
+    private final RectF logFilterAllRect = new RectF();
+    private final RectF logFilterErrRect = new RectF();
+    private final RectF logFilterWarnRect = new RectF();
+
+    // B4: Restart gateway button
+    private final RectF restartGwRect = new RectF();
+
+    // B8: RAM timeline (ring buffer of 60 points, 5 min at 5s/poll)
+    private final int[] ramHistory = new int[60];
+    private int ramHistoryIdx = 0;
+    private int ramHistoryCount = 0;
+
     // Touch tracking for tabs and controls
     private final RectF[] tabRects = new RectF[4];
     private final RectF brightnessSlider = new RectF();
@@ -119,7 +137,7 @@ public class DashboardView extends View {
     private boolean bootAnimDone = false;
     private long bootStartTime = 0;
     private static final String[] BOOT_LINES = {
-        "> POCKETCLAW v3.0",
+        "> POCKETCLAW v4.0",
         "> GATEWAY .............. ",
         "> WIFI ................. ",
         "> TELEGRAM ............. ",
@@ -135,6 +153,7 @@ public class DashboardView extends View {
         void onWifiToggle(boolean on);
         void onFlashlightToggle(boolean on);
         void onServerModeToggle(boolean on);
+        void onRestartGateway();
         void onReboot();
         void onKeyEdit(String name);
         void onKeyTest(String name);
@@ -174,7 +193,13 @@ public class DashboardView extends View {
     public void setWifiOn(boolean on) { this.wifiOn = on; }
     public void setTelegramLive(boolean live) { this.telegramLive = live; }
     public void setKimiOk(boolean ok) { this.kimiOk = ok; }
-    public void setRam(int used, int total) { this.ramUsed = used; this.ramTotal = Math.max(1, total); }
+    public void setRam(int used, int total) {
+        this.ramUsed = used; this.ramTotal = Math.max(1, total);
+        // B8: Record RAM history
+        ramHistory[ramHistoryIdx] = used;
+        ramHistoryIdx = (ramHistoryIdx + 1) % ramHistory.length;
+        if (ramHistoryCount < ramHistory.length) ramHistoryCount++;
+    }
     public void setSwap(int used, int total) { this.swapUsed = used; this.swapTotal = total; }
     public void setUptime(String u) { this.uptime = u; }
     public void setLastError(String e) { this.lastError = e; }
@@ -204,42 +229,106 @@ public class DashboardView extends View {
         int w = getWidth(), h = getHeight();
         if (w == 0 || h == 0) return;
 
+        // B1: Advance CRT animations
+        long now = System.currentTimeMillis();
+        if (lastFrameTime > 0) {
+            float dt = (now - lastFrameTime) / 1000f;
+            crt.tick(dt);
+        }
+        lastFrameTime = now;
+
         canvas.drawColor(CRTRenderer.BG);
 
         float pad = crt.dp(12);
 
+        // B3: Mini-status bar (on LOGS/KEYS/CTRL pages)
+        float statusBarH = drawMiniStatusBar(canvas, w, pad);
+
         // No tab bar — tabs are native TextViews in LauncherActivity
         // No STATUS page — that's the original TextView layout
         switch (currentPage) {
-            case PAGE_LOGS:   drawLogsPage(canvas, w, h, pad); break;
-            case PAGE_KEYS:   drawKeysPage(canvas, w, h, pad); break;
-            case PAGE_CTRL:   drawCtrlPage(canvas, w, h, pad); break;
+            case PAGE_LOGS:   drawLogsPage(canvas, w, h, pad, statusBarH); break;
+            case PAGE_KEYS:   drawKeysPage(canvas, w, h, pad, statusBarH); break;
+            case PAGE_CTRL:   drawCtrlPage(canvas, w, h, pad, statusBarH); break;
+        }
+
+        // B5: Flash feedback overlay
+        if (flashRect != null && now < flashUntil) {
+            crt.drawRect(canvas, flashRect.left, flashRect.top,
+                flashRect.width(), flashRect.height(), 0x3000FF41);
         }
 
         // CRT effects overlay
         if (effectsEnabled) {
             crt.drawScanlines(canvas, w, h);
             crt.drawVignette(canvas, w, h);
+            crt.drawScanBeam(canvas, w, h); // B1: Scan beam
         }
+
+        // B1: 30fps animation loop when visible
+        if (effectsEnabled && getVisibility() == VISIBLE) {
+            postInvalidateDelayed(33);
+        }
+    }
+
+    // B3: Draw compact status line at top of each page
+    private float drawMiniStatusBar(Canvas canvas, int w, float pad) {
+        float y = crt.dp(4);
+        String gwDot = gatewayUp ? "\u25CF" : "\u25CB";
+        String tgDot = telegramLive ? "\u25CF" : "\u25CB";
+        String kiDot = kimiOk ? "\u25CF" : "\u25CB";
+        int ramPct = ramTotal > 0 ? Math.round(ramUsed * 100f / ramTotal) : 0;
+        String bar = "RAM " + ramUsed + "/" + ramTotal + " \u2022 " + batteryInfo +
+            " \u2022 UP " + uptime + " \u2022 GW" + gwDot + " TG" + tgDot + " KI" + kiDot;
+        int barColor = ramPct > 80 ? CRTRenderer.RED : ramPct > 60 ? CRTRenderer.WARN : CRTRenderer.DIM;
+        crt.drawText(canvas, bar, pad, y + crt.dp(8), 7, barColor);
+        float h = crt.dp(12);
+        crt.drawRect(canvas, pad, y + h, w - pad * 2, crt.dp(1), 0xFF0A3A0A);
+        return h + crt.dp(3);
     }
 
     // ─── LOGS PAGE ────────────────────────────────────────────────
 
-    private void drawLogsPage(Canvas canvas, int w, int h, float pad) {
-        float maxY = h;
+    private void drawLogsPage(Canvas canvas, int w, int h, float pad, float statusBarH) {
+        float viewH = h;
         float lineH = crt.getLineHeight(10) + crt.dp(1);
         float heapLineH = heapLimit > 0 ? crt.getLineHeight(8) + crt.dp(6) : 0;
         float lazyLineH = lazyTotal > 0 ? crt.getLineHeight(8) + crt.dp(4) : 0;
-        float headerH = crt.getLineHeight(20) + crt.dp(2) + crt.getLineHeight(9) + crt.dp(8)
-                       + heapLineH + lazyLineH;
-        int maxLines = (int)((maxY - pad - headerH) / lineH);
-        int showCount = Math.min(logs.length, Math.max(1, maxLines));
+        float filterH = crt.dp(24);
+        float chartH = ramHistoryCount > 1 ? crt.dp(40) : 0;
+        float headerH = statusBarH + crt.getLineHeight(14) + crt.dp(4) + crt.getLineHeight(9) + crt.dp(6)
+                       + heapLineH + lazyLineH + filterH + crt.dp(4) + chartH;
 
-        float contentH = headerH + showCount * lineH;
-        float y = Math.max(pad, (maxY - contentH) / 2);
+        // B7: Filter logs
+        ArrayList<String> filtered = new ArrayList<>();
+        for (int i = 0; i < logs.length; i++) {
+            String line = logs[i];
+            if (logFilter == 1 && !(line.contains("ERROR") || line.startsWith("!"))) continue;
+            if (logFilter == 2 && !line.contains("WARN")) continue;
+            filtered.add(line);
+        }
 
-        crt.drawText(canvas, "LOGS", (w - crt.measureText("LOGS", 20)) / 2, y, 20, CRTRenderer.GREEN);
-        y += crt.getLineHeight(20) + crt.dp(2);
+        float contentH = headerH + filtered.size() * lineH + pad * 2;
+        maxScrollY = Math.max(0, contentH - viewH);
+        scrollY = Math.max(0, Math.min(scrollY, maxScrollY));
+
+        // B2: Pull-to-refresh on LOGS
+        if (pullDistance > 0 && scrollY == 0) {
+            String pullStr = pullDistance > crt.dp(60) ? "RELEASE TO REFRESH" : "PULL TO REFRESH";
+            int pullColor = pullDistance > crt.dp(60) ? CRTRenderer.GREEN : CRTRenderer.DIM;
+            float pullY = Math.min(pullDistance * 0.4f, crt.dp(30));
+            crt.drawText(canvas, pullStr, (w - crt.measureText(pullStr, 9)) / 2, pullY, 9, pullColor);
+        }
+
+        canvas.save();
+        canvas.clipRect(0, 0, w, viewH);
+        canvas.translate(0, -scrollY);
+
+        float y = pad + statusBarH;
+
+        // B1: Glow text for title
+        crt.drawGlowText(canvas, "LOGS", (w - crt.measureText("LOGS", 14)) / 2, y, 14, CRTRenderer.GREEN);
+        y += crt.getLineHeight(14) + crt.dp(4);
 
         String sub = "REAL-TIME GATEWAY OUTPUT";
         crt.drawText(canvas, sub, (w - crt.measureText(sub, 9)) / 2, y, 9, CRTRenderer.DIM);
@@ -256,6 +345,13 @@ public class DashboardView extends View {
             y += crt.getLineHeight(8) + crt.dp(2);
         }
 
+        // B8: RAM timeline mini-chart
+        if (ramHistoryCount > 1) {
+            crt.drawLineChart(canvas, pad, y, w - pad * 2, crt.dp(36),
+                ramHistory, ramHistoryIdx, ramHistoryCount, ramTotal);
+            y += crt.dp(40);
+        }
+
         // Lazy loading info
         if (lazyTotal > 0) {
             String lazyStr = "LAZY: " + lazyLoaded + "/" + lazyTotal + " loaded  DEAD: " + lazyDead;
@@ -263,10 +359,29 @@ public class DashboardView extends View {
             y += crt.getLineHeight(8) + crt.dp(4);
         }
 
-        y += crt.dp(4);
-        int startIdx = Math.max(0, logs.length - showCount);
-        for (int i = startIdx; i < logs.length && y + lineH <= maxY; i++) {
-            String line = logs[i];
+        // B7: Filter buttons [ALL] [ERR] [WARN]
+        float fbtnW = crt.dp(50);
+        float fbtnH = crt.dp(18);
+        float fbtnGap = crt.dp(6);
+        float fbtnX = (w - (fbtnW * 3 + fbtnGap * 2)) / 2;
+        for (int i = 0; i < 3; i++) {
+            float bx = fbtnX + i * (fbtnW + fbtnGap);
+            String[] labels = {"ALL", "ERR", "WARN"};
+            boolean active = logFilter == i;
+            int border = active ? CRTRenderer.GREEN : CRTRenderer.DIM;
+            crt.drawBorderedRect(canvas, bx, y, fbtnW, fbtnH, active ? 0xFF001A00 : 0xFF000D00, border);
+            crt.drawText(canvas, labels[i], bx + (fbtnW - crt.measureText(labels[i], 8)) / 2, y + crt.dp(13), 8,
+                active ? CRTRenderer.GREEN : CRTRenderer.DIM);
+            RectF r;
+            if (i == 0) { logFilterAllRect.set(bx, y, bx + fbtnW, y + fbtnH); r = logFilterAllRect; }
+            else if (i == 1) { logFilterErrRect.set(bx, y, bx + fbtnW, y + fbtnH); r = logFilterErrRect; }
+            else { logFilterWarnRect.set(bx, y, bx + fbtnW, y + fbtnH); r = logFilterWarnRect; }
+        }
+        y += fbtnH + crt.dp(6);
+
+        // Log lines
+        for (int i = 0; i < filtered.size(); i++) {
+            String line = filtered.get(i);
             if (line.length() > 42) line = line.substring(0, 42);
             int color = line.contains("ERROR") || line.startsWith("!") ? CRTRenderer.RED :
                         line.contains("WARN") ? CRTRenderer.WARN : CRTRenderer.MID;
@@ -274,8 +389,19 @@ public class DashboardView extends View {
             y += lineH;
         }
 
-        if (logs.length == 0) {
-            crt.drawText(canvas, "Waiting for logs...", pad, y, 12, CRTRenderer.DIM);
+        if (filtered.isEmpty()) {
+            String emptyMsg = logFilter == 0 ? "Waiting for logs..." :
+                logFilter == 1 ? "No errors" : "No warnings";
+            crt.drawText(canvas, emptyMsg, pad, y, 12, CRTRenderer.DIM);
+        }
+
+        canvas.restore();
+
+        // B2: Scroll indicator
+        if (maxScrollY > 0) {
+            float thumbH = Math.max(crt.dp(20), viewH * (viewH / contentH));
+            float thumbY = (viewH - thumbH) * (scrollY / maxScrollY);
+            crt.drawRect(canvas, w - crt.dp(3), thumbY, crt.dp(2), thumbH, 0x6600FF41);
         }
     }
 
@@ -306,7 +432,7 @@ public class DashboardView extends View {
         return false;
     }
 
-    private void drawKeysPage(Canvas canvas, int w, int h, float pad) {
+    private void drawKeysPage(Canvas canvas, int w, int h, float pad, float statusBarH) {
         float viewH = h;
         float cardH = crt.dp(76);
         float cardGap = crt.dp(6);
@@ -329,7 +455,7 @@ public class DashboardView extends View {
         }
 
         // Compute content height
-        float headerH = crt.getLineHeight(20) + crt.dp(2) + crt.getLineHeight(9) + crt.dp(8)
+        float headerH = statusBarH + crt.getLineHeight(14) + crt.dp(2) + crt.getLineHeight(9) + crt.dp(8)
                        + searchH + crt.dp(8);
         float cardsH;
         if (hasModules) {
@@ -359,10 +485,10 @@ public class DashboardView extends View {
         canvas.clipRect(0, 0, w, viewH);
         canvas.translate(0, -scrollY);
 
-        float y = pad;
+        float y = pad + statusBarH;
 
-        crt.drawText(canvas, "API KEYS", (w - crt.measureText("API KEYS", 20)) / 2, y, 20, CRTRenderer.GREEN);
-        y += crt.getLineHeight(20) + crt.dp(2);
+        crt.drawGlowText(canvas, "API KEYS", (w - crt.measureText("API KEYS", 14)) / 2, y, 14, CRTRenderer.GREEN);
+        y += crt.getLineHeight(14) + crt.dp(2);
 
         String sub = "MANAGE YOUR CREDENTIALS";
         crt.drawText(canvas, sub, (w - crt.measureText(sub, 9)) / 2, y, 9, CRTRenderer.DIM);
@@ -517,12 +643,12 @@ public class DashboardView extends View {
 
     // ─── CTRL PAGE ────────────────────────────────────────────────
 
-    private void drawCtrlPage(Canvas canvas, int w, int h, float pad) {
+    private void drawCtrlPage(Canvas canvas, int w, int h, float pad, float statusBarH) {
         float viewH = h;
         float setupBtnsH = systemSetupExpanded ? crt.dp(36) * 3 + crt.dp(8) * 3 + crt.dp(8) : 0;
-        float contentH = crt.getLineHeight(20) + crt.dp(16) + crt.dp(34) + crt.dp(40)
+        float contentH = statusBarH + crt.getLineHeight(14) + crt.dp(16) + crt.dp(34) + crt.dp(40)
             + crt.dp(17) + crt.dp(34) * 3 + crt.dp(8) + crt.dp(17)
-            + crt.dp(36) + crt.dp(8) + crt.dp(36) + crt.dp(12)
+            + crt.dp(36) + crt.dp(8) + crt.dp(36) + crt.dp(8) + crt.dp(36) + crt.dp(12)
             + crt.dp(17) + crt.dp(30) + setupBtnsH;
 
         maxScrollY = Math.max(0, contentH - viewH + pad * 2);
@@ -534,10 +660,11 @@ public class DashboardView extends View {
         canvas.clipRect(0, 0, w, viewH);
         canvas.translate(0, -scrollY);
 
-        float y = startY;
+        float y = startY + statusBarH;
 
-        crt.drawText(canvas, "CONTROL", (w - crt.measureText("CONTROL", 20)) / 2, y, 20, CRTRenderer.GREEN);
-        y += crt.getLineHeight(20) + crt.dp(16);
+        // B1: Glow text for title
+        crt.drawGlowText(canvas, "CONTROL", (w - crt.measureText("CONTROL", 14)) / 2, y, 14, CRTRenderer.GREEN);
+        y += crt.getLineHeight(14) + crt.dp(16);
 
         float sliderW = w - pad * 2 - crt.dp(100);
         float sliderH = crt.dp(12);
@@ -578,6 +705,13 @@ public class DashboardView extends View {
         String gcStr = "FORCE GC";
         crt.drawText(canvas, gcStr, (w - crt.measureText(gcStr, 13)) / 2, y + crt.dp(24), 13, CRTRenderer.MID);
         gcRect.set(pad, y, pad + btnW, y + btnH);
+        y += btnH + crt.dp(8);
+
+        // B4: Restart gateway button
+        crt.drawBorderedRect(canvas, pad, y, btnW, btnH, 0xFF001A00, 0xFF886611);
+        String restartStr = "RESTART GATEWAY";
+        crt.drawText(canvas, restartStr, (w - crt.measureText(restartStr, 13)) / 2, y + crt.dp(24), 13, CRTRenderer.WARN);
+        restartGwRect.set(pad, y, pad + btnW, y + btnH);
         y += btnH + crt.dp(8);
 
         // Reboot button
@@ -630,6 +764,9 @@ public class DashboardView extends View {
             crt.drawRect(canvas, x, y, fillW, h, CRTRenderer.GREEN);
         }
         crt.drawBorderedRect(canvas, x, y, w, h, 0x00000000, CRTRenderer.BAR_BORDER);
+        // B6: Thumb indicator (vertical line at position)
+        float thumbX = x + fillW;
+        crt.drawRect(canvas, thumbX - crt.dp(1), y - crt.dp(2), crt.dp(3), h + crt.dp(4), CRTRenderer.WHITE);
     }
 
     private float drawToggleRow(Canvas canvas, float pad, float y, int w, String label, boolean on, RectF hitRect) {
@@ -690,8 +827,8 @@ public class DashboardView extends View {
                     }
                     return true;
                 }
-                // Vertical scroll on KEYS page (with pull-to-refresh)
-                if (currentPage == PAGE_KEYS) {
+                // Vertical scroll on KEYS or LOGS page (with pull-to-refresh)
+                if (currentPage == PAGE_KEYS || currentPage == PAGE_LOGS) {
                     float deltaY = lastTouchY - y;
                     if (Math.abs(deltaY) > crt.dp(4)) isScrolling = true;
                     if (isScrolling) {
@@ -730,8 +867,9 @@ public class DashboardView extends View {
                 }
                 if (isScrolling) {
                     isScrolling = false;
-                    if (pullTriggered && currentPage == PAGE_KEYS) {
-                        if (listener != null) listener.onKeysRefresh();
+                    if (pullTriggered) {
+                        if (currentPage == PAGE_KEYS && listener != null) listener.onKeysRefresh();
+                        // LOGS pull-to-refresh just forces a redraw (data comes from fetch loop)
                     }
                     pullDistance = 0;
                     pullTriggered = false;
@@ -780,7 +918,22 @@ public class DashboardView extends View {
         invalidate();
     }
 
+    // B5: Flash a button rect green for 150ms
+    private void flashButton(RectF rect) {
+        flashRect = rect;
+        flashUntil = System.currentTimeMillis() + 150;
+        invalidate();
+    }
+
     private void handleTap(float x, float y) {
+        // LOGS page filter taps
+        if (currentPage == PAGE_LOGS) {
+            float sy = y + scrollY;
+            if (logFilterAllRect.contains(x, sy)) { logFilter = 0; scrollY = 0; flashButton(logFilterAllRect); return; }
+            if (logFilterErrRect.contains(x, sy)) { logFilter = 1; scrollY = 0; flashButton(logFilterErrRect); return; }
+            if (logFilterWarnRect.contains(x, sy)) { logFilter = 2; scrollY = 0; flashButton(logFilterWarnRect); return; }
+        }
+
         // CTRL page taps (adjust for scroll offset)
         if (currentPage == PAGE_CTRL) {
             float sy = y + scrollY;
@@ -803,7 +956,13 @@ public class DashboardView extends View {
                 return;
             }
             if (gcRect.contains(x, sy)) {
+                flashButton(gcRect);
                 if (listener != null) listener.onForceGC();
+                return;
+            }
+            if (restartGwRect.contains(x, sy)) {
+                flashButton(restartGwRect);
+                if (listener != null) listener.onRestartGateway();
                 return;
             }
             if (rebootRect.contains(x, sy)) {

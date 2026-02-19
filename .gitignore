@@ -44,5 +44,15 @@ nul
 screen-*.png
 tools/*_lf.sh
 
-# Phone pull staging directory
+# Desktop Electron
+desktop/node_modules/
+desktop/build*/
+
+# Payload directory
+payload/
+
+# Phone pull staging directory (historical snapshot — deploy from scripts/ instead)
 phone-pull/
+
+# proot-distro upstream (should be submodule or removed)
+tools/proot-distro-master/

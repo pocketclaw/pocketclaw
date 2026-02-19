@@ -223,7 +223,7 @@ openclaw gateway run --port 9000 --verbose
 ---
 
 ### Hack #13 — Ne PAS tuer Google Mobile Services
-**Problème :** Pour libérer de la RAM (Hack #11), on tuait `com.google.android.gms` et `com.google.android.gsf`. Résultat : le WiFi perd sa **route par défaut** (default gateway). Le téléphone garde son IP locale (`192.168.1.14`) mais ne peut plus sortir sur internet → `ENETUNREACH` sur toutes les requêtes.
+**Problème :** Pour libérer de la RAM (Hack #11), on tuait `com.google.android.gms` et `com.google.android.gsf`. Résultat : le WiFi perd sa **route par défaut** (default gateway). Le téléphone garde son IP locale (ex: `192.168.1.XX`) mais ne peut plus sortir sur internet → `ENETUNREACH` sur toutes les requêtes.
 
 **Symptôme :** `ping 8.8.8.8` → `Network is unreachable`, mais `ip addr show wlan0` montre une IP valide.
 
@@ -245,7 +245,7 @@ am force-stop com.google.process.gapps               # Play Store services
 
 **Statut : ✅ RÉSOLU — Script mis à jour, internet fonctionnel**
 
-**⚠️ Si le dégât est déjà fait** (GMS déjà tué et route perdue) : aucune commande ADB ne peut restaurer la route sans root. Il faut **manuellement sur le téléphone** : Paramètres → WiFi → appui long sur le réseau → "Oublier" → se reconnecter. Ça force un cycle DHCP complet qui remet la route `default via 192.168.1.254`.
+**⚠️ Si le dégât est déjà fait** (GMS déjà tué et route perdue) : aucune commande ADB ne peut restaurer la route sans root. Il faut **manuellement sur le téléphone** : Paramètres → WiFi → appui long sur le réseau → "Oublier" → se reconnecter. Ça force un cycle DHCP complet qui remet la route par défaut.
 
 ### Hack #15 — IPv6 DNS + autoSelectFamily
 **Problème :** Même après fix de la route IPv4, certains services (Telegram) échouent en DNS IPv4 dans proot. Le resolver DNS standard (`8.8.8.8`) renvoie `ECONNREFUSED` par intermittence depuis proot.
@@ -587,13 +587,13 @@ com.motorola.ccc.devicemanagement
 ```bash
 # Vérification :
 settings get global wifi_static_ip          # 1
-settings get global wifi_static_ip_address  # 192.168.1.14
-settings get global wifi_static_gateway     # 192.168.1.254
+settings get global wifi_static_ip_address  # <YOUR_PHONE_IP>
+settings get global wifi_static_gateway     # <YOUR_GATEWAY_IP>
 settings get global wifi_static_netmask     # 255.255.255.0
 settings get global wifi_static_dns1        # 8.8.8.8
 
 ip route show table 1030
-# default via 192.168.1.254 dev wlan0  proto static
+# default via <YOUR_GATEWAY_IP> dev wlan0  proto static
 ```
 
 **Test : tuer GMS avec IP statique :**
@@ -974,7 +974,7 @@ ssh -p 8022 -i ~/.ssh/id_moto 192.168.1.XX "ps aux | grep node"
 ```
 
 **Étape 4 — IP fixe (recommandé) :**
-Sur ta box internet (ex: `192.168.1.254` pour une Freebox), va dans les paramètres DHCP et attribue une **IP fixe** au Moto E2 basée sur son adresse MAC. Comme ça l'IP ne change jamais et tu n'as pas besoin de la rechercher à chaque fois.
+Sur ta box internet, va dans les paramètres DHCP et attribue une **IP fixe** au Moto E2 basée sur son adresse MAC. Comme ça l'IP ne change jamais et tu n'as pas besoin de la rechercher à chaque fois.
 
 **Astuce :** Ajoute un alias dans ton `~/.ssh/config` pour ne plus taper tout ça :
 ```

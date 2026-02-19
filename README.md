@@ -23,7 +23,7 @@
 
 **They said it couldn't be done. 53 hacks later, it's running.**
 
-[Setup Guide](#-setup-guide) · [Desktop App](#-desktop-app) · [The 53 Hacks](HACKS.md) · [Troubleshooting](#-troubleshooting) · [Contributing](CONTRIBUTING.md)
+[Setup Guide](#-setup-guide) · [The 53 Hacks](HACKS.md) · [Troubleshooting](#-troubleshooting) · [Contributing](CONTRIBUTING.md)
 
 </div>
 
@@ -31,7 +31,7 @@
 
 ## The Dashboard
 
-The web dashboard at `phone-ip:9000` has 3 pages: STATUS (live metrics + animated crab), KEYS (API key management with one-tap testing), and LOGS (real-time gateway output). CRT green-on-black aesthetic. The native launcher app replaces the home screen.
+The web dashboard at `phone-ip:9000` has 4 pages: STATUS (live metrics + animated crab), LOGS (real-time gateway output with level filters), KEYS (API key management with search and categories), and CTRL (hardware controls, force GC, gateway restart). CRT green-on-black aesthetic with scanlines, vignette, scan beam, and glow pulse at 30fps. The native launcher app replaces the home screen.
 
 <div align="center">
 <img src="crab-final.png" alt="PocketClaw Dashboard" width="270">
@@ -96,7 +96,7 @@ Bot:     "I'm running on a Moto E2 from 2015 with 1GB of RAM.
 - **RAM-optimized** — 155 MB PSS with V8 heap 128 MB, native node22, 37 lazy proxies, GC every 30s — on hardware that has 1 GB total
 - **Dalvik-free** — gateway detached via setsid, Termux Dalviks auto-killed after boot. Zero Java VMs running.
 - **53 documented hacks** — every impossible problem we hit, and how we solved it
-- **3-page dashboard** — STATUS (CRT crab + live metrics) / KEYS (API key management) / LOGS (real-time output). All accessible from any browser.
+- **4-page dashboard** — STATUS (CRT crab + live metrics) / LOGS (real-time logs with filters) / KEYS (API key management) / CTRL (hardware controls, GC, restart). All accessible from any browser or the native launcher.
 - **Aggressive debloat** — 144 → 13 packages, SystemUI killed, Android system under 70 MB
 
 ## The Hardware
@@ -379,10 +379,24 @@ cp /sdcard/Download/openclaw.example.json $ROOTFS/root/.openclaw/openclaw.json
 1. Message [@BotFather](https://t.me/BotFather) on Telegram
 2. `/newbot` → follow prompts → copy the token
 
-### Step 7 — Configure
+### Step 7 — Configure API keys
 
+**Option A — Interactive setup (easiest):**
 ```bash
-# Create the env file with your real keys
+# On your PC — asks for each key, pushes to phone, restarts gateway
+./tools/setup-keys.sh
+```
+
+**Option B — From a pre-filled file:**
+```bash
+# Copy and fill in your keys
+cp config/env.example my-keys.env
+# Edit my-keys.env with real values, then:
+./tools/setup-keys.sh my-keys.env
+```
+
+**Option C — Manual (via Termux SSH):**
+```bash
 cat > $ROOTFS/root/.openclaw/env << EOF
 KIMI_API_KEY=sk-kimi-YOUR_ACTUAL_KEY
 MOONSHOT_API_KEY=sk-kimi-YOUR_ACTUAL_KEY
@@ -452,36 +466,6 @@ adb shell dumpsys deviceidle disable                       # Disable Doze entire
 > **Don't disable screen sleep.** The phone should go to sleep normally — WiFi stays on, Termux runs in the background, and the watchdog restarts the gateway if it ever crashes.
 
 The `start-openclaw` script includes a **watchdog loop**: if the gateway dies (network error, OOM, etc.), it waits 10 seconds, cleans lock files, and restarts automatically. No manual intervention needed.
-
----
-
-## 💻 Desktop App
-
-**PocketClaw 3000 Desktop** — a Pip-Boy style Electron app to setup, monitor, and manage your PocketClaw devices from your computer.
-
-### One-Click Setup
-Plug the phone via USB, enter your API keys, hit START. The app handles all 8 setup steps automatically (~20 min).
-
-### Live Dashboard
-Monitor RAM, disk, battery, gateway status, and stream live logs — all from your desktop.
-
-### Features
-- **5 tabs** — STAT (dashboard), DEVICES (fleet), KEYS (API keys), SETUP (installer), TOOLS (remote commands + shell)
-- **CRT aesthetic** — scanlines, vignette, scan beam, 5 color themes (green, amber, blue, white, pink)
-- **8 crustacean avatars** — animated ASCII art, syncs to mobile dashboard
-- **USB + Network modes** — connect via ADB or HTTP gateway URL
-- **Auto-reconnect** — reconnects automatically on connection drop
-- **Interactive ADB shell** — run commands on the phone from the Tools tab
-- **Device persistence** — saved across app restarts
-
-### Quick Start
-```bash
-cd desktop
-npm install
-npm start
-```
-
-See [`desktop/README.md`](desktop/README.md) for full documentation.
 
 ---
 
@@ -637,7 +621,6 @@ adb shell monkey -p com.termux.boot -c android.intent.category.LAUNCHER 1
 pocketclaw/
 ├── README.md                      # You are here
 ├── HACKS.md                       # The 53 hacks — the full war story
-├── desktop/                       # Electron desktop app (setup + dashboard)
 ├── CONTRIBUTING.md                 # How to contribute
 ├── LICENSE                         # MIT
 ├── restore-debloat.sh             # One-script debloat (126 packages + tuning)
@@ -751,3 +734,7 @@ MIT — do whatever you want with it.
 **[Star this repo](https://github.com/MonteiroRobin/pocketclaw)** if you think old phones deserve a second life.
 
 </div>
+
+---
+
+*PocketClaw v4.0 — Native Gateway*

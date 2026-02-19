@@ -2,8 +2,8 @@
 # Set static IP for WiFi on Moto E2 (540x960) via UI automation
 # Usage: adb shell sh /sdcard/pocketclaw/tools/set-static-ip.sh [IP] [GATEWAY] [DNS1] [DNS2]
 
-IP="${1:-192.168.1.14}"
-GW="${2:-192.168.1.254}"
+IP="${1:-192.168.1.100}"
+GW="${2:-192.168.1.1}"
 DNS1="${3:-8.8.8.8}"
 DNS2="${4:-8.8.4.4}"
 
@@ -13,7 +13,7 @@ echo "Setting static IP: $IP gw $GW dns $DNS1 $DNS2"
 am start -a android.settings.WIFI_SETTINGS
 sleep 3
 
-# Long-press on Freebox (first connected network, at y=259)
+# Long-press on first connected network (at y=259)
 input swipe 270 259 270 259 1500
 sleep 2
 

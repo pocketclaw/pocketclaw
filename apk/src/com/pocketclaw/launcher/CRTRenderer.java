@@ -267,4 +267,41 @@ public class CRTRenderer {
     }
 
     public float getGlowPulse() { return glowPulse; }
+
+    /**
+     * B8: Draw a mini line chart from a ring buffer of int values.
+     * @param data ring buffer array
+     * @param idx next write position in the ring buffer
+     * @param count number of valid entries (may be < data.length)
+     * @param maxVal maximum value for Y scaling (e.g. ramTotal)
+     */
+    public void drawLineChart(Canvas c, float x, float y, float w, float h, int[] data, int idx, int count, int maxVal) {
+        if (count < 2 || maxVal <= 0) return;
+        // Background
+        c.drawRect(x, y, x + w, y + h, barBgPaint);
+        // Border
+        barBorderPaint.setColor(BAR_BORDER);
+        c.drawRect(x, y, x + w, y + h, barBorderPaint);
+        // Label
+        drawText(c, "RAM 5min", x + dp(4), y + dp(8), 6, DIM);
+        // Draw line segments
+        float stepX = w / (count - 1);
+        barPaint.setColor(GREEN);
+        barPaint.setStyle(Paint.Style.STROKE);
+        barPaint.setStrokeWidth(dp(1));
+        float prevPx = 0, prevPy = 0;
+        for (int i = 0; i < count; i++) {
+            int dataIdx = (idx - count + i + data.length) % data.length;
+            float pct = (float) data[dataIdx] / maxVal;
+            float px = x + i * stepX;
+            float py = y + h - (h * Math.min(1f, pct));
+            if (i > 0) {
+                c.drawLine(prevPx, prevPy, px, py, barPaint);
+            }
+            prevPx = px;
+            prevPy = py;
+        }
+        barPaint.setStrokeWidth(0);
+        barPaint.setStyle(Paint.Style.FILL);
+    }
 }
