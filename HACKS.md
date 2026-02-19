@@ -1489,7 +1489,7 @@ The setup writes the complete OpenClaw config including provider definition, cha
 
 **Solution:** `install.sh` — run from Termux, does everything:
 ```bash
-curl -sL https://raw.githubusercontent.com/MonteiroRobin/pocketclaw/main/install.sh | bash
+curl -sL https://raw.githubusercontent.com/pocketclaw/pocketclaw/main/install.sh | bash
 ```
 
 The script:

@@ -376,7 +376,7 @@ Clone this repo on your PC and push files to the phone:
 
 ```bash
 # On your PC
-git clone https://github.com/MonteiroRobin/pocketclaw.git
+git clone https://github.com/pocketclaw/pocketclaw.git
 cd pocketclaw
 
 # Push scripts to the phone
@@ -764,7 +764,7 @@ MIT — do whatever you want with it.
 *A phone from 2015. 1GB of RAM. 190 packages debloated. Native Node.js. Dalvik-free. 53 hacks.*<br>
 *If it can run AI, anything can.*
 
-**[Star this repo](https://github.com/MonteiroRobin/pocketclaw)** if you think old phones deserve a second life.
+**[Star this repo](https://github.com/pocketclaw/pocketclaw)** if you think old phones deserve a second life.
 
 </div>
 

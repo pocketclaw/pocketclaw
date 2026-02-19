@@ -4,7 +4,7 @@
 # Plug phone via USB, run this, follow prompts. That's it.
 #
 # Usage:
-#   git clone https://github.com/MonteiroRobin/pocketclaw.git
+#   git clone https://github.com/pocketclaw/pocketclaw.git
 #   cd pocketclaw
 #   bash setup.sh
 #
@@ -147,11 +147,11 @@ adb shell am broadcast \
   -n com.termux/com.termux.app.RunCommandService \
   -a com.termux.RUN_COMMAND \
   --es com.termux.RUN_COMMAND_PATH '/data/data/com.termux/files/usr/bin/bash' \
-  --esa com.termux.RUN_COMMAND_ARGUMENTS '-c,curl -sL https://raw.githubusercontent.com/MonteiroRobin/pocketclaw/main/install.sh | bash' \
+  --esa com.termux.RUN_COMMAND_ARGUMENTS '-c,curl -sL https://raw.githubusercontent.com/pocketclaw/pocketclaw/main/install.sh | bash' \
   --ez com.termux.RUN_COMMAND_BACKGROUND false 2>/dev/null || {
     # Fallback: type the command via input text
     warn "RUN_COMMAND not available, sending command via input..."
-    adb shell input text "curl%s-sL%shttps://raw.githubusercontent.com/MonteiroRobin/pocketclaw/main/install.sh%s|%sbash"
+    adb shell input text "curl%s-sL%shttps://raw.githubusercontent.com/pocketclaw/pocketclaw/main/install.sh%s|%sbash"
     adb shell input keyevent 66  # Enter
   }
 

@@ -4,7 +4,7 @@
 # Transforms an old Android phone into an AI agent
 #
 # Usage (from Termux):
-#   curl -sL https://raw.githubusercontent.com/MonteiroRobin/pocketclaw/main/install.sh | bash
+#   curl -sL https://raw.githubusercontent.com/pocketclaw/pocketclaw/main/install.sh | bash
 #
 # Requires: Android 5+, Termux, WiFi connection
 # Tested on: Moto E2 (1GB RAM, Android 6)
@@ -14,7 +14,7 @@ set -e
 
 PREFIX=/data/data/com.termux/files/usr
 ROOTFS=$PREFIX/var/lib/proot-distro/installed-rootfs/ubuntu
-REPO="https://raw.githubusercontent.com/MonteiroRobin/pocketclaw/main"
+REPO="https://raw.githubusercontent.com/pocketclaw/pocketclaw/main"
 
 G='\033[0;32m'  # green
 O='\033[0;33m'  # orange

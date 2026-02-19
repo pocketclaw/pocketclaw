@@ -5,7 +5,7 @@
 **PocketClaw** transforme un Moto E2 4G LTE (XT1524, 1 GB RAM, Android 6.0, Snapdragon 410)
 en serveur AI autonome via OpenClaw, avec un launcher Canvas natif.
 
-**Repo GitHub** : `MonteiroRobin/pocketclaw`
+**Repo GitHub** : `pocketclaw/pocketclaw`
 
 ---
 
