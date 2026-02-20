@@ -21,9 +21,9 @@
 
 ---
 
-**They said it couldn't be done. 55 hacks later, it's running.**
+**They said it couldn't be done. 57 hacks later, it's running.**
 
-[Setup Guide](#-setup-guide) · [The 55 Hacks](HACKS.md) · [Troubleshooting](#-troubleshooting) · [Contributing](CONTRIBUTING.md)
+[Setup Guide](#-setup-guide) · [The 57 Hacks](HACKS.md) · [Troubleshooting](#-troubleshooting) · [Contributing](CONTRIBUTING.md)
 
 </div>
 
@@ -93,9 +93,9 @@ Bot:     "I'm running on a Moto E2 from 2015 with 1GB of RAM.
 - **Voice messages** — send a voice note, get a text reply (via OpenAI Whisper)
 - **Fully autonomous** — watchdog + health checks auto-restart on crash or freeze, survives reboots
 - **`pocketclaw` CLI** — `start`, `stop`, `restart`, `status`, `logs`, `monitor` from one command
-- **RAM-optimized** — 155 MB PSS with V8 heap 128 MB, native node22, 37 lazy proxies, GC every 30s — on hardware that has 1 GB total
+- **RAM-optimized** — V8 heap 170 MB, native node22, 37 lazy proxies, GC every 30s — on hardware that has 1 GB total
 - **Dalvik-free** — gateway detached via setsid, Termux Dalviks auto-killed after boot. Zero Java VMs running.
-- **53 documented hacks** — every impossible problem we hit, and how we solved it
+- **57 documented hacks** — every impossible problem we hit, and how we solved it
 - **4-page dashboard** — STATUS (CRT crab + live metrics) / LOGS (real-time logs with filters) / KEYS (API key management) / CTRL (hardware controls, GC, restart). All accessible from any browser or the native launcher.
 - **Aggressive debloat** — 144 → 13 packages, SystemUI killed, Android system under 70 MB
 
@@ -125,17 +125,17 @@ If it runs on a Moto E2 from 2015, **it runs on anything you own.**
        └──────────┬───────────────┘
                   │
         ┌─────────▼──────────┐
-        │  OpenClaw Gateway  │  155 MB PSS
+        │  OpenClaw Gateway  │  ~190 MB PSS
         │  (port 9000)       │  (single process)
         ├────────────────────┤
-        │  node22 (no ICU)   │  NDK cross-compiled
+        │  node22-icu        │  NDK cross-compiled
         │  + LD_PRELOAD shim │  API 23 compat
         ├────────────────────┤
         │  Termux (native)   │  sshd + cron only
         ├────────────────────┤
         │  Android 6         │  ~70 MB PSS
-        │  (131 packages     │
-        │   debloated)       │
+        │ (131 packages       │
+        │  debloated)        │
         ├────────────────────┤
         │  PocketClaw APK    │  38 MB PSS
         │  (native launcher) │
@@ -152,21 +152,20 @@ All connections are **outbound**. The phone calls Telegram and your AI provider 
 
 ## Current Status (February 2026)
 
-**364 MB used → targeting ~290 MB** on 898 MB total RAM.
+**~310 MB used** on 898 MB total RAM.
 
-Latest session achievements:
-- **Dalvik-free operation:** Gateway launched with `setsid` (detached session), then Termux Dalvik VMs killed via cron. Zero Java VMs running. Saves 20-40 MB.
-- **fs.promises patching:** Extended path rewriting to async fs operations. Fixes `EACCES` on `/root` paths that broke Telegram channel.
-- **3-page dashboard:** STATUS (live metrics + crab) / KEYS (API key management) / LOGS (real-time gateway output). All at `phone-ip:9000`.
-- **Lazy loading v3:** Proxy-based deferred require — 37 package prefixes lazy-loaded. Everything works, only what you use consumes RAM.
+Latest achievements:
+- **Dalvik-free operation:** Gateway launched with `setsid` (detached session), then Termux Dalviks auto-killed. Zero Java VMs running.
+- **4-page dashboard:** STATUS / LOGS / KEYS / CTRL at `phone-ip:9000` with CRT animations, live metrics, API key management, hardware controls.
+- **Lazy loading v3:** Proxy-based deferred require — 37 package prefixes lazy-loaded. Only what you use consumes RAM.
 - **Boot autonomy:** Survives reboots, Dalvik kills, WiFi drops. Fully unattended.
-- **V8 128 MB heap + no ICU:** Reduced from 180 MB. Semi-space halved. Initial old space 32 MB. GC every 30s.
+- **V8 170 MB heap:** Semi-space 2 MB. GC every 30s via `--expose-gc`. Restart every 6h to contain memory leak (~2 MB/h).
 
 | Metric | Value |
 |---|---|
-| Total RAM used | ~364 MB (targeting ~290 MB) |
-| Gateway RSS | ~155 MB |
-| V8 heap limit | 128 MB |
+| Total RAM used | ~310 MB |
+| Gateway RSS | ~190 MB |
+| V8 heap limit | 170 MB |
 | Android system | ~70 MB |
 | Dalvik VMs | 0 (killed post-boot) |
 | Lazy modules | 37 proxies, loads on demand |
@@ -186,23 +185,23 @@ Every version squeezed more out of the same hardware:
 | | **v0** Initial | **v2** Debloat | **v4** SystemUI opt | **v6** Single process | **v7** Native node | **v8** Lazy + tuned | **v9** Ultra |
 |---|---|---|---|---|---|---|---|
 | **Packages** | 144 | 25 | 19 | 13 | 13 | 13 | **13** |
-| **Runtime** | proot | proot | proot | proot | native node22-icu | native node22-icu | **native node22 (no ICU)** |
-| **Gateway RSS** | ~231 MB | ~231 MB | ~234 MB | 186 MB | 157 MB | 155 MB | **~140 MB** |
-| **V8 heap** | 192 MB | 192 MB | 192 MB | 160 MB | 112 MB | 112 MB | **128 MB** |
+| **Runtime** | proot | proot | proot | proot | native node22-icu | native node22-icu | **native node22-icu** |
+| **Gateway RSS** | ~231 MB | ~231 MB | ~234 MB | 186 MB | 157 MB | 155 MB | **~190 MB** |
+| **V8 heap** | 384 MB | 384 MB | 384 MB | 160 MB | 112 MB | 112 MB | **170 MB** |
 | **Android sys** | ~450 MB | ~314 MB | ~170 MB | ~70 MB | ~70 MB | ~70 MB | **~70 MB** |
-| **Total RAM** | ~780 MB | ~630 MB | ~500 MB | ~393 MB | ~310 MB | ~321 MB | **~290-310 MB** |
+| **Total RAM** | ~780 MB | ~630 MB | ~500 MB | ~393 MB | ~310 MB | ~321 MB | **~305 MB** |
 | **Swap** | 87 MB | 8 MB | 2 MB | 1 MB | 14 MB | 14 MB | **~14 MB** |
 | **Module loading** | - | 9 stubs | 9 stubs | 9 stubs | 12 stubs | 37 lazy proxies | **37 lazy proxies** |
 | **Dalvik VMs** | running | running | running | running | running | running | **0 (killed)** |
 | **Boot** | manual | manual | manual | full auto | full auto | full auto | **full auto + setsid** |
 
-**Total gains v0 → v9:** Android 450→70 MB (-84%), Gateway 231→~140 MB (-39%), proot eliminated, Dalviks killed, 131 packages removed, SystemUI eliminated, ICU removed, V8 heap 192→128 MB, GC 60→30s, lazy loading via Proxy, setsid detach.
+**Total gains v0 → v9:** Android 450→70 MB (-84%), Gateway 231→~190 MB (-18%), proot eliminated, Dalviks killed, 131 packages debloated, SystemUI eliminated, V8 heap 384→170 MB, GC 60→30s, lazy loading via Proxy, setsid detach, 6h restart cycle.
 
-### Memory budget (current — v8)
+### Memory budget (current — v9)
 
 | Component | PSS | Notes |
 |---|---|---|
-| OpenClaw gateway | ~140 MB | Native node22 (no ICU), V8 heap 128 MB, lazy loading, LD_PRELOAD API23 shim |
+| OpenClaw gateway | ~190 MB | Native node22-icu, V8 heap 170 MB, lazy loading, LD_PRELOAD API23 shim, 6h restart |
 | Android system (system_server) | 72 MB | 13 packages, SystemUI dead, dormants killed every 5 min |
 | PocketClaw Launcher | 39 MB | Native HOME screen (no WebView), required by Android |
 | zygote | 32 MB | Shared fork parent (unavoidable) |
@@ -211,21 +210,20 @@ Every version squeezed more out of the same hardware:
 | rild + netd + wpa | 7 MB | Radio, network, WiFi daemons |
 | logd + other native | 9 MB | Logging, debuggerd, vold, keystore, etc. |
 | Termux Dalviks | 0 MB | Killed post-boot via setsid + kill-dalvik cron |
-| **Total PSS** | **~290-310 MB** | On 898 MB total — **~590-610 MB free**, 14 MB swap |
+| **Total PSS** | **~310 MB** | On 898 MB total — **~590 MB free**, 14 MB swap |
 
 ### What we tuned
 
 | Optimization | Impact |
 |---|---|
-| **Native node22 (no ICU)** | NDK cross-compiled Node.js 22.12.0 without ICU data (~25 MB saved). No proot overhead → **-29 MB PSS** |
+| **Native node22-icu** | NDK cross-compiled Node.js 22.12.0 with small-icu. No proot overhead → **-29 MB PSS** |
 | **LD_PRELOAD API23 shim** | `libapi23compat.so` provides 11 API 24 symbols missing from Android 6.0's bionic |
-| `--max-old-space-size=128` | Caps V8 heap. Reduced from 180 MB. GC works harder but RSS drops. |
-| `--max-semi-space-size=1` | Reduces V8 young generation — more minor GC but less peak RSS |
-| `--initial-old-space-size=32` | V8 starts small and grows on demand instead of pre-allocating |
+| `--max-old-space-size=170` | Caps V8 heap. Startup peaks ~146 MB, grows ~2 MB/h (leak). Restart every 6h. |
+| `--max-semi-space-size=2` | Reduces V8 young generation — more minor GC but less peak RSS |
 | `--expose-gc` + periodic GC | Explicit `global.gc()` every 30s frees ~10 MB per cycle |
 | **setsid + kill-dalvik** | Gateway detached, Termux Dalviks killed post-boot → **-20 to -40 MB** |
 | Lazy loading v3 (Proxy) | 37 package prefixes deferred via Proxy — loads on first use. Saves ~40 MB RSS. |
-| Debloat 126+64 packages | `pm uninstall -k --user 0` (126) + `pm disable` via Dirty COW (64) |
+| Debloat 131 packages | `pm uninstall -k --user 0` (126) + `pm disable` via Dirty COW (5) — 144 → 13 |
 | Kill SystemUI | `pm uninstall -k --user 0 com.android.systemui` — launcher has nav buttons |
 | Dirty COW daemon stopper | Kills drmserver, qcamerasvr, audiod, ppd. Kernel tuning via COW'd post_boot.sh |
 | Dormant killer loop | Boot script force-stops respawning services every 5 min |
@@ -270,7 +268,7 @@ $ pocketclaw status
 Gateway:  RUNNING (PID 20122)
 Uptime:   up 5 days, 17:00
 RAM:      588MB available / 898MB total
-Gateway:  159MB RSS (heap 112MB)
+Gateway:  190MB RSS (heap 170MB)
 Swap:     14MB used
 Disk:     2048MB free
 Battery:  87%, 31.2°C
@@ -554,7 +552,7 @@ OpenClaw works with **30+ providers** out of the box. Just change the provider, 
 | `plugins.entries.telegram.enabled: true` | **Required.** Without this, Telegram won't load even if `channels.telegram` is configured. |
 | `reasoning: false` | Prevents extended thinking mode that can cause empty responses. |
 | `network.autoSelectFamily: true` | Enables dual-stack IPv4/IPv6 for better connectivity. |
-| `--max-old-space-size=128` | Caps V8 heap. Reduced from 180 MB. Stable with aggressive GC. |
+| `--max-old-space-size=170` | Caps V8 heap. Startup peaks ~146 MB, grows ~2 MB/h (leak). Restart every 6h. |
 | `--expose-gc` | Enables `global.gc()`. Combined with hijack.js timer, frees ~10 MB every 30s. |
 | `maxConcurrency: 1` | One request at a time. More would OOM on 1 GB RAM. |
 
@@ -602,7 +600,7 @@ rm -f $ROOTFS/tmp/openclaw/*.lock
 <details>
 <summary><b>Out of memory / phone freezes</b></summary>
 
-- Verify `--max-old-space-size=112` is in NODE_OPTIONS
+- Verify `--max-old-space-size=170` is in NODE_OPTIONS
 - Run `restore-debloat.sh` to remove bloat packages
 - Kill dormant services: `am force-stop com.android.settings` etc.
 - **Never kill** `com.termux` or `com.termux.boot`
@@ -611,7 +609,7 @@ rm -f $ROOTFS/tmp/openclaw/*.lock
 <details>
 <summary><b>Gateway OOM at startup</b></summary>
 
-The live heap peaks at 93 MB during module loading. V8 heap 96 MB OOMs. Use 112 MB minimum (native) or 128 MB (proot).
+Startup peaks at ~146 MB. Memory leak grows heap ~2 MB/h. V8 heap 170 MB with restart every 6h keeps it stable. 150 MB OOMs during startup.
 </details>
 
 <details>
@@ -653,7 +651,7 @@ adb shell monkey -p com.termux.boot -c android.intent.category.LAUNCHER 1
 ```
 pocketclaw/
 ├── README.md                      # You are here
-├── HACKS.md                       # The 55 hacks — the full war story (how we did it)
+├── HACKS.md                       # The 57 hacks — the full war story (how we did it)
 ├── CONTRIBUTING.md                 # How to contribute
 ├── LICENSE                         # MIT
 ├── restore-debloat.sh             # One-script debloat (126 packages + tuning)
@@ -696,7 +694,7 @@ pocketclaw/
 
 ```
 $PREFIX/bin/
-  ├── node22               # NDK cross-compiled Node.js 22.12.0 (no ICU)
+  ├── node22-icu           # NDK cross-compiled Node.js 22.12.0 (small-icu)
   ├── node22-icu           # Node.js with ICU (fallback if Intl needed)
   ├── start-openclaw       # Native gateway + watchdog loop
   ├── restart-gw           # Clean kill + restart
@@ -720,7 +718,7 @@ $ROOTFS/root/
 
 ---
 
-## The 55 Hacks
+## The 57 Hacks
 
 Every single problem we hit — and the hack that fixed it. From proot crashes to Dirty COW kernel exploits, from cross-compiling Node.js with NDK to shimming 11 missing API 24 symbols via LD_PRELOAD. From OOM at 96 MB heap to killing Dalvik VMs post-boot for Dalvik-free operation.
 
@@ -736,10 +734,10 @@ Every single problem we hit — and the hack that fixed it. From proot crashes t
 | Android | 6.0 Marshmallow |
 | RAM | 1 GB (898 MB usable) |
 | Termux | v0.119.0-beta.3 (apt-android-5) |
-| Node.js | 22.12.0 (NDK cross-compiled with ICU, native — no proot) |
+| Node.js | 22.12.0 (NDK cross-compiled with small-icu, native — no proot) |
 | OpenClaw | 2026.2.9 |
 | AI Model | Kimi K2.5 (works with [any provider](#-pick-your-ai)) |
-| Debloat | v9 — 13 packages, native node22 (no ICU), lazy proxies, setsid + kill-dalvik, ~290-310 MB total |
+| Debloat | v9 — 13 packages, native node22-icu, lazy proxies, setsid + kill-dalvik, ~310 MB total |
 
 ---
 
@@ -761,7 +759,7 @@ MIT — do whatever you want with it.
 
 **Built with stubbornness on a mass of impossible constraints.**
 
-*A phone from 2015. 1GB of RAM. 190 packages debloated. Native Node.js. Dalvik-free. 55 hacks.*<br>
+*A phone from 2015. 1GB of RAM. 131 packages debloated. Native Node.js. Dalvik-free. 57 hacks.*<br>
 *If it can run AI, anything can.*
 
 **[Star this repo](https://github.com/pocketclaw/pocketclaw)** if you think old phones deserve a second life.
@@ -770,4 +768,4 @@ MIT — do whatever you want with it.
 
 ---
 
-*PocketClaw v4.0 — Native Gateway*
+*PocketClaw v9 — Native Gateway*

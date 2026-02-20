@@ -1,6 +1,6 @@
 # PocketClaw — OpenClaw on a Moto E2 (The Impossible Install)
 
-> "They said it couldn't be done. We did it anyway. 55 hacks later."
+> "They said it couldn't be done. We did it anyway. 57 hacks later."
 
 **Date:** February 10-11, 2026
 **Device:** Motorola Moto E2 (2015) — codename `surnia`/`otis`
@@ -38,7 +38,7 @@ Before any software hacking, the phone must be stripped to the bone:
 
 ---
 
-## The 55 Hacks
+## The 57 Hacks
 
 ### Hack #1 — Manual proot-distro
 **Problem:** proot-distro isn't in the Termux repos for Android 6.

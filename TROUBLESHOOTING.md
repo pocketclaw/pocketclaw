@@ -136,9 +136,9 @@ adb reboot
 - If the message says `Reached heap limit` — V8 heap is too small
 - If `dmesg | grep oom` shows a kill — kernel OOM (not enough physical RAM)
 
-**Gotcha:** During a messy boot (lots of Android processes starting at once), the kernel can put pressure on V8 and trigger a heap OOM even when the heap size is normally fine. **Don't increase the heap** — that's a regression (128 to 256 = 128 MB wasted). Wait for boot to settle down, then restart.
+**Gotcha:** During a messy boot (lots of Android processes starting at once), the kernel can put pressure on V8 and trigger a heap OOM even when the heap size is normally fine. Wait for boot to settle down, then restart.
 
-**Optimal V8 heap:** `--max-old-space-size=128` (stable, tested). 96 = OOM, 256 = regression.
+**Optimal V8 heap:** `--max-old-space-size=170` with restart every 6h (cron). Startup peaks ~146 MB, grows ~2 MB/h (memory leak). 150 MB OOMs during startup.
 
 ---
 

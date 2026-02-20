@@ -200,26 +200,27 @@ javac -source 1.8 -target 1.8 -classpath android.jar
 | v1 (proot) | ~500 MB+ | Ubuntu proot + Node 18 |
 | v5 | ~393 MB | Debloat v6, 13 packages |
 | v7 | ~310 MB | **Proot eliminated**, native node22-icu |
-| v8 (current) | **~321 MB** | Heap 112 MB, lazy loading v3, daemon stopper |
+| v8 | ~321 MB | Heap 112 MB, lazy loading v3, daemon stopper |
+| v9 (current) | **~305 MB** | Heap 170 MB, setsid + kill-dalvik, Dalvik-free, 6h restart |
 
 ### Current RAM Breakdown
 
 | Component | RAM |
 |-----------|-----|
-| Gateway (node22-icu) | ~155 MB (heap 112, live 105) |
-| system_server | ~97 MB |
-| zygote | ~63 MB |
-| PocketClaw Launcher | ~55 MB |
+| Gateway (node22-icu) | ~190 MB (heap 170, startup peak ~146) |
+| system_server | ~72 MB |
+| zygote | ~32 MB |
+| PocketClaw Launcher | ~39 MB |
 | Other Android | ~varies |
-| **Total** | **~321 MB** |
+| **Total** | **~305 MB** |
 
 ### Techniques Applied
 
-- **V8**: `--max-old-space-size=112 --max-semi-space-size=2`
+- **V8**: `--max-old-space-size=170 --max-semi-space-size=2` (restart every 6h — memory leak ~2 MB/h)
 - **Threads**: `UV_THREADPOOL_SIZE=1`
 - **Lazy loading**: Proxy-based, 37 interceptable packages, ~8 loaded on-demand
 - **Dead stubs**: 23 modules blocked at require()
-- **Debloat**: 64+ Android packages disabled, 13 remaining
+- **Debloat**: 131 packages debloated (126 uninstalled + 5 disabled), 13 remaining
 - **Daemon stopper**: 6 daemons killed (drmserver, qcamerasvr, audiod, media, ppd, atfwd)
 - **Kernel tuning**: vfs_cache_pressure=500, min_free_kbytes=2048, drop_caches=3
 - **Dirty COW**: Two-phase (post_boot.sh + app_process32) for sysctl + daemon kill
@@ -237,13 +238,12 @@ javac -source 1.8 -target 1.8 -classpath android.jar
 
 ## 6. Current State and Known Issues
 
-### Working (v4.0)
+### Working (v9)
 - Native gateway (no proot)
-- CRT dashboard on :9003 (4 pages)
+- CRT dashboard on :9000 (4 pages)
 - Telegram bot connected
 - Auto-boot gateway via Termux Boot
 - 4-tab Canvas launcher with 30fps CRT animations
-- Electron desktop app (committed)
 - Google keyboard restored (libjni_keyboarddecoder.so fix)
 - Auth token on sensitive endpoints
 - SSE log streaming
@@ -294,4 +294,4 @@ pocketclaw/
 
 ---
 
-*Last updated 2026-02-18 — PocketClaw v4.0 Native Gateway*
+*Last updated 2026-02-19 — PocketClaw v9 Native Gateway*

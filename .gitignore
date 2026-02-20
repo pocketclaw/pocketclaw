@@ -44,10 +44,6 @@ nul
 screen-*.png
 tools/*_lf.sh
 
-# Desktop Electron
-desktop/node_modules/
-desktop/build*/
-
 # Payload directory
 payload/
 

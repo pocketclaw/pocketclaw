@@ -58,8 +58,13 @@ fi
 
 # Wake lock: keeps CPU on + WiFi alive while screen is off.
 # Requires com.termux Dalvik alive (48 MB cost — can't kill it, cgroup cascades).
-# Also run "adb shell dumpsys deviceidle disable" for belt-and-suspenders Doze bypass.
 termux-wake-lock 2>/dev/null && log "Wake lock acquired" || log "WARNING: wake lock failed"
+
+# Disable Doze + WiFi sleep (prevents WiFi dormant at night)
+dumpsys deviceidle disable 2>/dev/null && log "Doze disabled"
+settings put global wifi_sleep_policy 2 2>/dev/null
+settings put global captive_portal_detection_enabled 0 2>/dev/null
+log "WiFi: never sleep, captive portal off"
 
 # Start the gateway in a NEW SESSION (setsid) so it survives com.termux.boot kill
 /system/bin/setsid start-openclaw > "$PREFIX/tmp/openclaw-gateway.log" 2>&1 &
@@ -71,23 +76,24 @@ sleep 30
 # NOTE: Do NOT force-stop com.termux.boot — it sets the "stopped" flag
 # which prevents BOOT_COMPLETED broadcast on next reboot = bot won't auto-start
 
-# Kill dormant services (first pass)
+# Kill dormant services + Google Keyboard (first pass)
 for PKG in com.android.systemui com.android.settings com.android.keychain \
   com.android.externalstorage com.android.defcontainer \
   com.android.providers.downloads com.android.providers.downloads.ui \
   com.google.android.packageinstaller com.google.android.webview \
   com.motorola.android.providers.settings com.android.location.fused \
-  com.motorola.ccc.devicemanagement; do
+  com.motorola.ccc.devicemanagement com.google.android.inputmethod.latin; do
   am force-stop "$PKG" 2>/dev/null
 done
-log "Dormant services force-stopped (12 packages)"
+log "Dormant services + keyboard force-stopped (13 packages)"
 
-# Single merged kill loop: SystemUI + dormants every 5 min (saves 2 bash processes)
+# Single merged kill loop: SystemUI + dormants + keyboard every 5 min
 (while true; do
   sleep 300
   for PKG in com.android.systemui com.android.settings com.android.keychain \
     com.android.externalstorage com.android.defcontainer \
-    com.android.location.fused com.motorola.ccc.devicemanagement; do
+    com.android.location.fused com.motorola.ccc.devicemanagement \
+    com.google.android.inputmethod.latin; do
     am force-stop "$PKG" 2>/dev/null
   done
 done) &

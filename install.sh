@@ -212,7 +212,7 @@ step "Installing scripts..."
 
 # Determine heap size based on RAM
 if [ "$MEM_TOTAL" -lt 1024 ]; then
-  HEAP=128
+  HEAP=170
 elif [ "$MEM_TOTAL" -lt 2048 ]; then
   HEAP=256
 else

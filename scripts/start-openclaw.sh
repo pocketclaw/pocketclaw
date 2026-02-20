@@ -54,10 +54,9 @@ while true; do
   mkdir -p "$NODE_COMPILE_CACHE" 2>/dev/null
   export ANDROID_DATA=/data
   export ANDROID_ROOT=/system
-  # Heap 150 MB — can't go lower (old space uses ~133 MB steady state, 140 OOMs after ~1h)
-  # --initial-old-space-size=32 crashes node22-icu (unsupported flag)
-  HEAP=150
-  export NODE_OPTIONS="-r $HIJACK --expose-gc --no-warnings --max-old-space-size=$HEAP --max-semi-space-size=1"
+  # Heap 170 MB — startup peaks ~146 MB, grows ~2 MB/h (leak), restart every 6h
+  HEAP=170
+  export NODE_OPTIONS="-r $HIJACK --expose-gc --no-warnings --max-old-space-size=$HEAP --max-semi-space-size=2"
   echo "[$(date)] V8 heap: ${HEAP}MB"
 
   # Run gateway natively — no proot!

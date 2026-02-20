@@ -38,14 +38,16 @@ else
   log "sshd already running"
 fi
 
-# Install cron jobs (healthcheck every 2 min, log rotation every hour)
+# Install cron jobs
 CRON_DIR="$PREFIX/var/spool/cron/crontabs"
 mkdir -p "$CRON_DIR"
 CRONTAB="$CRON_DIR/$(whoami)"
 echo "*/2 * * * * $PREFIX/bin/wifi-watchdog" > "$CRONTAB"
 echo "*/2 * * * * $PREFIX/bin/healthcheck" >> "$CRONTAB"
 echo "0 * * * * $PREFIX/bin/logrotate-pc" >> "$CRONTAB"
-log "Crons installed"
+echo "0 */6 * * * $PREFIX/bin/restart-gw" >> "$CRONTAB"
+echo "* * * * * $PREFIX/bin/gateway-keepalive" >> "$CRONTAB"
+log "Crons installed (watchdog, health, logrotate, restart-gw 6h, keepalive)"
 
 # Start cron daemon (idempotent)
 if ! pgrep -x crond >/dev/null 2>&1; then
@@ -98,17 +100,27 @@ fi
 # NOTE: Do NOT force-stop com.termux.boot — it sets the "stopped" flag
 # which prevents BOOT_COMPLETED broadcast on next reboot = bot won't auto-start
 
-# Kill dormant services (first pass)
-am force-stop com.android.settings 2>/dev/null
-am force-stop com.android.keychain 2>/dev/null
-am force-stop com.android.externalstorage 2>/dev/null
-am force-stop com.android.defcontainer 2>/dev/null
-am force-stop com.android.providers.downloads 2>/dev/null
-am force-stop com.android.providers.downloads.ui 2>/dev/null
-am force-stop com.google.android.packageinstaller 2>/dev/null
-am force-stop com.google.android.webview 2>/dev/null
-am force-stop com.motorola.android.providers.settings 2>/dev/null
-log "Dormant services force-stopped (9 packages)"
+# === WiFi stability — ALL settings reset on reboot/zygote restart ===
+dumpsys deviceidle disable 2>/dev/null
+settings put global wifi_sleep_policy 2 2>/dev/null
+settings put global stay_on_while_plugged_in 3 2>/dev/null
+settings put global captive_portal_detection_enabled 0 2>/dev/null
+# Reduce WiFi scan interval (default 20s is too aggressive, wastes CPU/battery)
+settings put global wifi_supplicant_scan_interval_ms 120000 2>/dev/null
+# Disable network scoring (prevents random WiFi switches)
+settings put global network_scoring_provisioned 1 2>/dev/null
+log "WiFi: Doze off, never sleep, stay on plugged, captive portal off, scan 120s"
+
+# Kill dormant services (first pass) — keyboard already uninstalled
+for PKG in com.android.systemui com.android.settings com.android.keychain \
+  com.android.externalstorage com.android.defcontainer \
+  com.android.providers.downloads com.android.providers.downloads.ui \
+  com.google.android.packageinstaller com.google.android.webview \
+  com.motorola.android.providers.settings com.android.location.fused \
+  com.motorola.ccc.devicemanagement; do
+  am force-stop "$PKG" 2>/dev/null
+done
+log "Dormant services force-stopped (12 packages)"
 
 # Repeat dormant kills every 5 min (they respawn) — only if not already running
 if ! pgrep -f 'sleep 300' >/dev/null 2>&1; then
