@@ -90,8 +90,8 @@ else
     TERMUX_URL="https://github.com/termux/termux-app/releases/download/v0.119.0-beta.3/termux-app_v0.119.0-beta.3+apt-android-5-github-debug_armeabi-v7a.apk"
     ok "Using Termux v0.119.0-beta.3 (Android 5-6)"
   else
-    TERMUX_URL="https://github.com/termux/termux-app/releases/download/v0.119.1-beta.1/termux-app_v0.119.1-beta.1+f-droid-repo-debug_universal.apk"
-    ok "Using Termux v0.119.1 (Android 7+)"
+    TERMUX_URL="https://github.com/termux/termux-app/releases/download/v0.119.0-beta.3/termux-app_v0.119.0-beta.3+apt-android-7-github-debug_universal.apk"
+    ok "Using Termux v0.119.0-beta.3 (Android 7+)"
   fi
 
   if [ ! -f /tmp/termux.apk ]; then

@@ -15,6 +15,9 @@ set -e
 PREFIX=/data/data/com.termux/files/usr
 ROOTFS=$PREFIX/var/lib/proot-distro/installed-rootfs/ubuntu
 REPO="https://raw.githubusercontent.com/pocketclaw/pocketclaw/main"
+# Last OpenClaw version PocketClaw ran with. Newer releases need Node.js 24.16+
+# and are untested with hijack.js. See README "Before you start".
+OPENCLAW_VERSION="2026.2.12"
 
 G='\033[0;32m'  # green
 O='\033[0;33m'  # orange
@@ -164,7 +167,7 @@ else
   proot --link2symlink --root-id --rootfs=$ROOTFS \
     --bind=/dev --bind=/proc --bind=/sys \
     --bind=$PREFIX/tmp:/tmp --cwd=/root \
-    /bin/bash -c "export PATH=/usr/local/bin:/usr/bin:/bin && npm install -g openclaw 2>&1 | tail -3"
+    /bin/bash -c "export PATH=/usr/local/bin:/usr/bin:/bin && npm install -g openclaw@$OPENCLAW_VERSION 2>&1 | tail -3"
   ok "OpenClaw installed"
 fi
 
