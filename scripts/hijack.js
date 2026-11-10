@@ -1519,6 +1519,7 @@ _http.Server.prototype.listen = function () {
           return true;
         }
         if (req.url === "/api/setup" && req.method === "POST") {
+          if (!_checkAuth(req, res)) return true;
           _handleSetup(req, res);
           return true;
         }
@@ -1666,14 +1667,17 @@ _http.Server.prototype.listen = function () {
           return true;
         }
         if (req.url === "/api/setup/debloat" && req.method === "POST") {
+          if (!_checkAuth(req, res)) return true;
           _handleDebloat(req, res);
           return true;
         }
         if (req.url === "/api/setup/launcher" && req.method === "POST") {
+          if (!_checkAuth(req, res)) return true;
           _handleSetLauncher(req, res);
           return true;
         }
         if (req.url === "/api/setup/harden" && req.method === "POST") {
+          if (!_checkAuth(req, res)) return true;
           _handleHarden(req, res);
           return true;
         }
@@ -1683,6 +1687,7 @@ _http.Server.prototype.listen = function () {
           return true;
         }
         if (req.url === "/api/modules/toggle" && req.method === "POST") {
+          if (!_checkAuth(req, res)) return true;
           _handleModuleToggle(req, res);
           return true;
         }
