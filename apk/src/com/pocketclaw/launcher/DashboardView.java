@@ -92,7 +92,7 @@ public class DashboardView extends View {
 
     // B5: Button feedback (flash green 150ms on tap)
     private long flashUntil = 0;
-    private RectF flashRect = null;
+    private RectF feedbackRect = null;
 
     // B7: Log filter (0=ALL, 1=ERR, 2=WARN)
     private int logFilter = 0;
@@ -253,9 +253,9 @@ public class DashboardView extends View {
         }
 
         // B5: Flash feedback overlay
-        if (flashRect != null && now < flashUntil) {
-            crt.drawRect(canvas, flashRect.left, flashRect.top,
-                flashRect.width(), flashRect.height(), 0x3000FF41);
+        if (feedbackRect != null && now < flashUntil) {
+            crt.drawRect(canvas, feedbackRect.left, feedbackRect.top,
+                feedbackRect.width(), feedbackRect.height(), 0x3000FF41);
         }
 
         // CRT effects overlay
@@ -920,7 +920,7 @@ public class DashboardView extends View {
 
     // B5: Flash a button rect green for 150ms
     private void flashButton(RectF rect) {
-        flashRect = rect;
+        feedbackRect = rect;
         flashUntil = System.currentTimeMillis() + 150;
         invalidate();
     }
