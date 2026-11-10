@@ -9,29 +9,48 @@
  ╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝╚══════╝   ╚═╝    ╚═════╝╚══════╝╚═╝  ╚═╝ ╚══╝╚══╝
 ```
 
-**A modern AI agent running on a $0 phone from 2015.**<br>
-**1GB RAM. Android 6. Snapdragon 410. It works.**
+**The 2026 experiment that ran an AI agent gateway on a $0 phone from 2015.**<br>
+**1GB RAM. Android 6. Snapdragon 410. It worked.**
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Android 5+](https://img.shields.io/badge/Android-5%2B-green.svg)](https://www.android.com)
-[![OpenClaw](https://img.shields.io/badge/OpenClaw-2026.2.9-blue.svg)](https://openclaw.ai)
-[![Any LLM](https://img.shields.io/badge/Any_LLM-OpenAI_compatible-purple.svg)](#-pick-your-ai)
-[![Telegram Bot](https://img.shields.io/badge/Telegram-Bot_API-26A5E4.svg)](https://core.telegram.org/bots)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Status: archived experiment](https://img.shields.io/badge/status-experiment%2C_best--effort-lightgrey.svg)](#project-status)
+[![OpenClaw 2026.2.x](https://img.shields.io/badge/OpenClaw-2026.2.x_(pinned)-blue.svg)](#before-you-start)
 
----
-
-**They said it couldn't be done. 57 hacks later, it's running.**
-
-[Setup Guide](#-setup-guide) · [The 57 Hacks](HACKS.md) · [Troubleshooting](#-troubleshooting) · [Contributing](CONTRIBUTING.md)
+[pocketclaw.dev](https://pocketclaw.dev) · [Setup Guide](#setup-guide) · [The 57 Hacks](HACKS.md) · [Security](SECURITY.md) · [Troubleshooting](TROUBLESHOOTING.md) · [Changelog](CHANGELOG.md)
 
 </div>
 
 ---
 
+> [!IMPORTANT]
+> **PocketClaw is now [pocketclaw.dev](https://pocketclaw.dev).**
+>
+> What started as this phone experiment became an independent publication about self-hosted AI agents (OpenClaw, Hermes Agent, Nanobot, NanoClaw, IronClaw, ZeroClaw, Moltworker). We test what claims to work, write down what does, and recommend the boring choice when boring is right.
+>
+> - **[Hardware guide](https://pocketclaw.dev/hardware)**: what to run each agent on, per agent.
+> - **[CVE tracker](https://pocketclaw.dev/cves)**: known vulnerabilities in self-hosted agents.
+> - **[Agents](https://pocketclaw.dev/agents)**: the agents we cover and how they compare.
+> - **[Setup blueprint](https://pocketclaw.dev/blueprint)**: a one-time paid setup guide.
+>
+> This repository stays online as the original phone experiment. It is not where the site lives, and it is not actively developed. If you want to run an agent today, start with the hardware guide, not with a 2015 phone.
+
+---
+
+## Project status
+
+Read this before anything else.
+
+- **What it is:** a working proof of concept. The whole repository was written between February 11 and February 20, 2026, on one Motorola Moto E2 (1 GB RAM, Android 6). There have been no code changes since.
+- **Maintenance:** best-effort only. Issues and pull requests are read, but nothing is guaranteed to be fixed. Do not use this for anything you depend on.
+- **Tested hardware:** one phone. Other devices are untested unless someone reports them in an issue.
+- **OpenClaw version:** the gateway was run with OpenClaw 2026.2.9, then 2026.2.12 (it auto-updated during testing). The runtime patches in `scripts/hijack.js` target those versions. Newer OpenClaw releases are untested, and current ones need Node.js 24 or later, which the Android 6 build below cannot provide.
+- **Security:** the pinned OpenClaw versions have published critical security advisories. See [Before you start](#before-you-start) and [SECURITY.md](SECURITY.md).
+
+---
+
 ## The Dashboard
 
-The web dashboard at `phone-ip:9000` has 4 pages: STATUS (live metrics + animated crab), LOGS (real-time gateway output with level filters), KEYS (API key management with search and categories), and CTRL (hardware controls, force GC, gateway restart). CRT green-on-black aesthetic with scanlines, vignette, scan beam, and glow pulse at 30fps. The native launcher app replaces the home screen.
+The web dashboard at `phone-ip:9000/dashboard` has 4 pages: STATUS (live metrics and an animated crab), LOGS (real-time gateway output with level filters), KEYS (API key management) and CTRL (hardware controls, force GC, gateway restart). It uses a green-on-black CRT look. A small native launcher app (in `apk/`) replaces the Android home screen and draws the same dashboard without a WebView.
 
 <div align="center">
 <img src="crab-final.png" alt="PocketClaw Dashboard" width="270">
@@ -63,21 +82,18 @@ The web dashboard at `phone-ip:9000` has 4 pages: STATUS (live metrics + animate
 │  Swap 14/256 MB  •  auto-boot ✓         │
 │                                          │
 │      V8 112MB • NATIVE • NODE 22 • KIMI  │
-│  ┌──────┬──────┬──────┬──────┐           │
-│  │  ⚙   │  ◔   │  ■   │  ◀  │           │
-│  └──────┴──────┴──────┴──────┘           │
 └──────────────────────────────────────────┘
 ```
 
 ---
 
-## The Pitch
+## The Pitch (February 2026)
 
-You have an old phone in a drawer. It's worthless. Nobody wants it.
+You have an old phone in a drawer. Nobody wants it.
 
-We turned it into a **self-hosted AI assistant** that runs 24/7, answers on Telegram, and survives reboots on its own.
+We turned one into a **self-hosted AI assistant** that ran 24/7, answered on Telegram, and restarted itself after reboots.
 
-No cloud server. No root required. Bring your own AI — free or paid, your choice. Just a mass of hacks and stubbornness.
+No cloud server. No root required. Bring your own AI provider.
 
 ```
 You:     "hey, what's the weather like?"
@@ -86,33 +102,30 @@ Bot:     "I'm running on a Moto E2 from 2015 with 1GB of RAM.
           I can even answer you right now."
 ```
 
-## What You Get
+## What it does
 
-- **A Telegram bot** running 24/7 on a phone that belongs in a museum
-- **Any AI you want** — works with any OpenAI-compatible provider (see [Pick Your AI](#-pick-your-ai))
-- **Voice messages** — send a voice note, get a text reply (via OpenAI Whisper)
-- **Fully autonomous** — watchdog + health checks auto-restart on crash or freeze, survives reboots
-- **`pocketclaw` CLI** — `start`, `stop`, `restart`, `status`, `logs`, `monitor` from one command
-- **RAM-optimized** — V8 heap 170 MB, native node22, 37 lazy proxies, GC every 30s — on hardware that has 1 GB total
-- **Dalvik-free** — gateway detached via setsid, Termux Dalviks auto-killed after boot. Zero Java VMs running.
-- **57 documented hacks** — every impossible problem we hit, and how we solved it
-- **4-page dashboard** — STATUS (CRT crab + live metrics) / LOGS (real-time logs with filters) / KEYS (API key management) / CTRL (hardware controls, GC, restart). All accessible from any browser or the native launcher.
-- **Aggressive debloat** — 144 → 13 packages, SystemUI killed, Android system under 70 MB
+- **A Telegram bot** running on the phone, powered by the [OpenClaw](https://openclaw.ai) gateway
+- **Any OpenAI-compatible AI provider** configured in `openclaw.json` (see [Pick your AI](#pick-your-ai))
+- **Voice messages** transcribed with OpenAI Whisper, if you add an OpenAI key
+- **Self-restarting**: a watchdog loop, a healthcheck cron and a Termux:Boot script bring the gateway back after crashes and reboots
+- **`pocketclaw` CLI**: `start`, `stop`, `restart`, `status`, `logs`, `monitor`
+- **RAM tuning** for 1 GB: capped V8 heap, 37 lazy-loaded package prefixes, periodic GC, Termux Dalvik VMs killed after boot
+- **4-page dashboard** in any browser on the same network, plus a native launcher APK
+- **Aggressive debloat** script for the Moto E2: 144 packages down to 13
+- **57 documented hacks** in [HACKS.md](HACKS.md): every problem hit along the way and how it was worked around
 
 ## The Hardware
 
-This was stress-tested on the **absolute worst-case scenario**:
+It was built on a deliberately bad case:
 
-| | Spec | Required | Actual | Gap |
-|---|---|---|---|---|
-| **RAM** | 3 GB | 1 GB | **3x under** |
-| **Android** | 10+ | 6.0 | **4 versions behind** |
-| **CPU** | ARM64 | ARM32 | **Wrong architecture** |
-| **Node.js** | v22 | v12 max (native) | **10 major versions** |
+| | OpenClaw expects | Moto E2 | Gap |
+|---|---|---|---|
+| **RAM** | 3 GB | 1 GB | 3x under |
+| **Android** | 10+ | 6.0 | 4 versions behind |
+| **CPU** | ARM64 | ARM32 | Older architecture |
+| **Node.js** | v22 | v12 max (Termux native) | 10 major versions |
 
-If it runs on a Moto E2 from 2015, **it runs on anything you own.**
-
-> Got a phone from 2018+? You'll have a *much* easier time. The guide still applies, just with fewer hacks needed.
+A newer phone needs fewer of the hacks, but only the Moto E2 was actually tested.
 
 ## Architecture
 
@@ -134,53 +147,25 @@ If it runs on a Moto E2 from 2015, **it runs on anything you own.**
         │  Termux (native)   │  sshd + cron only
         ├────────────────────┤
         │  Android 6         │  ~70 MB PSS
-        │ (131 packages       │
-        │  debloated)        │
+        │  (131 packages     │
+        │   debloated)       │
         ├────────────────────┤
         │  PocketClaw APK    │  38 MB PSS
         │  (native launcher) │
         └────────────────────┘
 
         Total: ~310 MB / 898 MB
-        Free:  ~588 MB
-        Swap:  ~14 MB
 ```
 
-All connections are **outbound**. The phone calls Telegram and your AI provider — they never call back. This means: any WiFi works, any hotspot works, no port forwarding, no dynamic DNS. Plug it in and forget about it.
+Connections to Telegram and to the AI provider are **outbound**: no port forwarding, no dynamic DNS. The dashboard on port 9000 is the exception: it listens on the local network (see [Known limits](#known-limits)).
 
 ---
 
-## Current Status (February 2026)
+## Performance (measured on the Moto E2, February 2026)
 
-**~310 MB used** on 898 MB total RAM.
-
-Latest achievements:
-- **Dalvik-free operation:** Gateway launched with `setsid` (detached session), then Termux Dalviks auto-killed. Zero Java VMs running.
-- **4-page dashboard:** STATUS / LOGS / KEYS / CTRL at `phone-ip:9000` with CRT animations, live metrics, API key management, hardware controls.
-- **Lazy loading v3:** Proxy-based deferred require — 37 package prefixes lazy-loaded. Only what you use consumes RAM.
-- **Boot autonomy:** Survives reboots, Dalvik kills, WiFi drops. Fully unattended.
-- **V8 170 MB heap:** Semi-space 2 MB. GC every 30s via `--expose-gc`. Restart every 6h to contain memory leak (~2 MB/h).
-
-| Metric | Value |
-|---|---|
-| Total RAM used | ~310 MB |
-| Gateway RSS | ~190 MB |
-| V8 heap limit | 170 MB |
-| Android system | ~70 MB |
-| Dalvik VMs | 0 (killed post-boot) |
-| Lazy modules | 37 proxies, loads on demand |
-| Boot time | ~90s to fully operational |
-| Swap | ~14 MB / 256 MB |
-
----
-
-## 📊 Performance
-
-Running a modern AI gateway on 1 GB RAM requires aggressive optimization. Here's what we measured and tuned:
+These numbers come from `dumpsys meminfo` and the project's own monitor script on the single test phone. They were not re-measured since and will differ on other devices or OpenClaw versions.
 
 ### Evolution
-
-Every version squeezed more out of the same hardware:
 
 | | **v0** Initial | **v2** Debloat | **v4** SystemUI opt | **v6** Single process | **v7** Native node | **v8** Lazy + tuned | **v9** Ultra |
 |---|---|---|---|---|---|---|---|
@@ -195,379 +180,256 @@ Every version squeezed more out of the same hardware:
 | **Dalvik VMs** | running | running | running | running | running | running | **0 (killed)** |
 | **Boot** | manual | manual | manual | full auto | full auto | full auto | **full auto + setsid** |
 
-**Total gains v0 → v9:** Android 450→70 MB (-84%), Gateway 231→~190 MB (-18%), proot eliminated, Dalviks killed, 131 packages debloated, SystemUI eliminated, V8 heap 384→170 MB, GC 60→30s, lazy loading via Proxy, setsid detach, 6h restart cycle.
+The V8 heap went back up from 112 MB to 170 MB in v9 because OpenClaw 2026.2.12 needed more memory at startup than 2026.2.9.
 
-### Memory budget (current — v9)
+### Memory budget (v9)
 
 | Component | PSS | Notes |
 |---|---|---|
-| OpenClaw gateway | ~190 MB | Native node22-icu, V8 heap 170 MB, lazy loading, LD_PRELOAD API23 shim, 6h restart |
-| Android system (system_server) | 72 MB | 13 packages, SystemUI dead, dormants killed every 5 min |
+| OpenClaw gateway | ~190 MB | Native node22-icu, V8 heap 170 MB, lazy loading, LD_PRELOAD API 23 shim, 6h restart |
+| Android system (system_server) | 72 MB | 13 packages, SystemUI removed, dormant services killed every 5 min |
 | PocketClaw Launcher | 39 MB | Native HOME screen (no WebView), required by Android |
-| zygote | 32 MB | Shared fork parent (unavoidable) |
+| zygote | 32 MB | Shared fork parent |
 | surfaceflinger | 10 MB | Display compositor |
-| mediaserver | 7 MB | Respawns (init restarts it) |
+| mediaserver | 7 MB | Respawned by init |
 | rild + netd + wpa | 7 MB | Radio, network, WiFi daemons |
 | logd + other native | 9 MB | Logging, debuggerd, vold, keystore, etc. |
-| Termux Dalviks | 0 MB | Killed post-boot via setsid + kill-dalvik cron |
-| **Total PSS** | **~310 MB** | On 898 MB total — **~590 MB free**, 14 MB swap |
+| Termux Dalviks | 0 MB | Killed after boot via setsid + kill-dalvik cron |
+| **Total PSS** | **~310 MB** | Of 898 MB usable |
 
-### What we tuned
+### What was tuned
 
-| Optimization | Impact |
+| Optimization | Effect observed |
 |---|---|
-| **Native node22-icu** | NDK cross-compiled Node.js 22.12.0 with small-icu. No proot overhead → **-29 MB PSS** |
-| **LD_PRELOAD API23 shim** | `libapi23compat.so` provides 11 API 24 symbols missing from Android 6.0's bionic |
-| `--max-old-space-size=170` | Caps V8 heap. Startup peaks ~146 MB, grows ~2 MB/h (leak). Restart every 6h. |
-| `--max-semi-space-size=2` | Reduces V8 young generation — more minor GC but less peak RSS |
-| `--expose-gc` + periodic GC | Explicit `global.gc()` every 30s frees ~10 MB per cycle |
-| **setsid + kill-dalvik** | Gateway detached, Termux Dalviks killed post-boot → **-20 to -40 MB** |
-| Lazy loading v3 (Proxy) | 37 package prefixes deferred via Proxy — loads on first use. Saves ~40 MB RSS. |
-| Debloat 131 packages | `pm uninstall -k --user 0` (126) + `pm disable` via Dirty COW (5) — 144 → 13 |
-| Kill SystemUI | `pm uninstall -k --user 0 com.android.systemui` — launcher has nav buttons |
-| Dirty COW daemon stopper | Kills drmserver, qcamerasvr, audiod, ppd. Kernel tuning via COW'd post_boot.sh |
+| **Native node22-icu** | NDK cross-compiled Node.js 22.12.0 with small-icu. No proot overhead (about -29 MB PSS) |
+| **LD_PRELOAD API 23 shim** | `libapi23compat.so` provides 11 API 24 symbols missing from Android 6.0's bionic |
+| `--max-old-space-size=170` | Caps the V8 heap. Startup peaked around 146 MB, then grew about 2 MB/h, so the gateway restarts every 6h |
+| `--max-semi-space-size=2` | Smaller young generation: more minor GCs, lower peak RSS |
+| `--expose-gc` + periodic GC | `global.gc()` every 30s |
+| **setsid + kill-dalvik** | Gateway detached, Termux Dalviks killed after boot (20 to 40 MB freed) |
+| Lazy loading v3 (Proxy) | 37 package prefixes loaded on first use |
+| Debloat | `pm uninstall -k --user 0` plus `pm disable` via Dirty COW, 144 packages down to 13 |
+| Kill SystemUI | The launcher provides navigation buttons instead |
 | Dormant killer loop | Boot script force-stops respawning services every 5 min |
-| Animations off | `window_animation_scale=0`, `transition_animation_scale=0`, `animator_duration_scale=0` |
-| Low power mode | `settings put global low_power 1` — reduces SystemUI overhead |
-| Screen brightness 0 | `screen_brightness=0`, `screen_off_timeout=15000` |
 
-### What we tested and ruled out
+### What was tried and ruled out
 
 | Idea | Result |
 |---|---|
-| V8 heap 96 MB | OOM — live heap peaks at 93 MB during startup module loading |
-| V8 heap 128 MB (proot era) | OOM — working set ~124 MB with proot overhead |
-| `--jitless` | Crashes — disables WebAssembly, OpenClaw has 5 WASM deps. On ARM32, only saves 3-5 MB anyway (no code range reservation on 32-bit) |
-| `--lite-mode` | Same crash — also disables WASM |
-| `--no-turbofan` | Exit code 9 — likely LMK kill during slower interpreter-only startup |
-| `--single-threaded` | Crashes gateway immediately at startup (silent exit, no error). Works for simple scripts but not OpenClaw |
-| `NODE_COMPILE_CACHE` | Creates versioned dir but 0 cache files on ARM32/Node 22. Research confirms: no heap reduction anyway — same bytecode objects regardless |
-| esbuild bundling | Would **increase** memory 3-4x. V8 eagerly parses single large files (loses lazy parsing). Module system overhead is only ~2 MB for 1547 modules |
-| Alternative runtimes (QuickJS, txiki.js, LLRT, Hermes) | None can run OpenClaw's 1547 npm modules. QuickJS uses 5-15 MB but lacks Node.js APIs. Would need complete rewrite |
-| Kill PocketClaw Launcher | Android respawns immediately — HOME activity required |
-| Kill Termux Dalvik (old) | Only saves ~3 MB without setsid — shared pages stay mapped. With setsid (Hack #49), saves 20-40 MB because gateway survives independently. |
-| Dirty COW from Termux | SELinux blocks untrusted_app from opening /system files |
-| `am hang` from Termux | Aborted — needs shell domain, not untrusted_app |
-| Kill SystemUI via `am force-stop` | Doesn't work — PERSISTENT flag, needs `pm uninstall` |
-| `pm disable-user` SystemUI | SecurityException — permission denied |
-| `pm install -r /system/priv-app/X.apk` | Installs to `/data/app/`, **loses privileged permissions** — never do this |
-| `pm clear com.android.systemui` | Corrupts keyguard → black screen lockout |
-| `immersive.full=*` | Hides nav bar in ALL apps — user gets stuck in Settings |
-| Force-stop `com.termux.boot` | Sets "stopped" flag → no `BOOT_COMPLETED` → bot won't auto-start |
-| V8 startup snapshot (`--build-snapshot`) | ESM restore fails: `ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING` |
-| Module stubbing v3 (disk stubs) | Only -4 MB for high risk of breaking features — abandoned |
-| Bun runtime | No ARM32 build available |
+| V8 heap 96 MB | OOM: live heap peaks at 93 MB during startup |
+| `--jitless`, `--lite-mode` | Crash: they disable WebAssembly, which OpenClaw needs |
+| `--no-turbofan` | Exit code 9, likely killed by the low-memory killer during slower startup |
+| `--single-threaded` | Gateway exits silently at startup |
+| `NODE_COMPILE_CACHE` | No cache files written on ARM32 / Node 22 |
+| esbuild bundling | Would raise memory: V8 loses lazy parsing on one large file |
+| QuickJS, txiki.js, LLRT, Hermes, Bun | Cannot run OpenClaw's npm modules, or no ARM32 build |
+| V8 startup snapshot | ESM restore fails (`ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING`) |
+| `pm install -r /system/priv-app/X.apk` | Loses privileged permissions. Never do this |
+| `pm clear com.android.systemui` | Corrupts keyguard, black screen lockout |
+| Force-stop `com.termux.boot` | Blocks `BOOT_COMPLETED`, so the bot no longer auto-starts |
 
-### Monitoring
-
-The `monitor` script logs RAM, CPU, swap, disk, battery every 5 minutes to a CSV. The `logrotate` cron trims everything to 24h. The `healthcheck` cron restarts the gateway if it stops responding.
-
-```
-$ pocketclaw status
-=== PocketClaw Status ===
-Gateway:  RUNNING (PID 20122)
-Uptime:   up 5 days, 17:00
-RAM:      588MB available / 898MB total
-Gateway:  190MB RSS (heap 170MB)
-Swap:     14MB used
-Disk:     2048MB free
-Battery:  87%, 31.2°C
-Crons:    2 active
-```
+The full list, with the reasoning behind each one, is in [HACKS.md](HACKS.md).
 
 ---
 
-## 🚀 Setup Guide
+## Setup Guide
 
-### Prerequisites
+### Before you start
 
-- An Android 5+ phone (any brand, any condition)
-- A USB cable to connect the phone to your PC
-- WiFi connection
-- ADB installed on your PC ([Android SDK Platform Tools](https://developer.android.com/tools/releases/platform-tools))
-- 10 minutes of patience (30 min on 1GB RAM devices)
+- **Pin OpenClaw.** Install `openclaw@2026.2.12`, the last version this project ran. An unpinned `npm install -g openclaw` now installs a release that requires Node.js 24.16 or later and will not start on the Node 22 runtimes used here.
+- **Know what you are running.** OpenClaw 2026.2.x is affected by published critical advisories (the GitHub Advisory Database lists OpenClaw up to 2026.6.6-beta.2 as affected). Run it only on a network you trust, with a dedicated Telegram bot and an AI provider key that has a spending limit. Check [pocketclaw.dev/cves](https://pocketclaw.dev/cves) for the current list.
+- **The phone is deliberately weakened.** The Android 6 path uses a kernel exploit (Dirty COW, `tools/dirtycow.c`) on your own device to stop system daemons, and an Android 6 phone no longer gets security updates. Keep it off untrusted networks and do not put personal accounts on it.
+- **Set a dashboard token.** Without `POCKETCLAW_TOKEN`, anyone on the same network can use the dashboard API. See [Known limits](#known-limits).
 
-### Step 0 — Enable USB Debugging on the phone
+There are two paths. **Path A** (Android 7+) is scripted and uses an Ubuntu container under proot. **Path B** (Android 5 and 6) is the native setup that the Moto E2 actually ran in its final state, and it is manual.
 
-USB Debugging lets your PC send commands to the phone via ADB. This is a **one-time setup**.
+### Prerequisites (both paths)
 
-**Enable Developer Options:**
-1. Open **Settings** on the phone
-2. Go to **About phone** (usually at the bottom)
-3. Find **Build number** — tap it **7 times** rapidly
-4. You'll see a toast message: *"You are now a developer!"*
+- An Android phone, a USB cable and WiFi
+- ADB on your PC ([Android SDK Platform Tools](https://developer.android.com/tools/releases/platform-tools))
+- A Telegram bot token from [@BotFather](https://t.me/BotFather) (`/newbot`, then copy the token)
+- An API key from an AI provider (see [Pick your AI](#pick-your-ai))
 
-**Enable USB Debugging:**
-1. Go back to **Settings**
-2. A new menu **Developer options** has appeared (usually above or below "About phone")
-3. Open **Developer options**
-4. Toggle **USB debugging** → ON
-5. Confirm the security prompt
+### Step 0: Enable USB debugging
 
-**Connect and authorize:**
-1. Plug the phone into your PC with a USB cable
-2. A popup appears on the phone: *"Allow USB debugging?"*
-3. Check **"Always allow from this computer"** and tap **OK**
-4. On your PC, verify the connection:
-   ```bash
-   adb devices
-   # Should show your device as "device" (not "unauthorized")
-   ```
+1. **Settings > About phone**, tap **Build number** 7 times until you see "You are now a developer!"
+2. **Settings > Developer options**, turn **USB debugging** on
+3. Plug the phone in, accept **"Allow USB debugging?"** and tick **"Always allow from this computer"**
+4. On your PC, `adb devices` should list the phone as `device` (not `unauthorized`)
 
-> **If `adb devices` shows "unauthorized"**: unplug the cable, revoke USB debugging authorizations in Developer options, plug back in, and accept the popup again.
->
-> **If no popup appears**: try a different USB cable (some cables are charge-only), or toggle USB debugging off and on again.
+If it shows `unauthorized`, revoke USB debugging authorizations in Developer options and reconnect. If no popup appears, try another cable (some are charge-only).
 
-### Step 1 — Install Termux
+### Path A: Android 7+ (scripted, proot)
 
-| Android Version | What to Install |
-|---|---|
-| 5-6 | Termux **v0.119.0-beta.3** `apt-android-5` from [GitHub Releases](https://github.com/termux/termux-app/releases) |
-| 7+ | Latest Termux from [F-Droid](https://f-droid.org/packages/com.termux/) |
+**Option 1, from your PC** (installs Termux and Termux:Boot over ADB, runs the installer inside Termux, applies the 24/7 settings, and offers an optional debloat):
 
-> **Do NOT install from Google Play** — the Play Store version is deprecated.
+```bash
+git clone https://github.com/pocketclaw/pocketclaw.git
+cd pocketclaw
+bash setup.sh
+```
 
-### Step 2 — Base packages
+**Option 2, from Termux on the phone** (install Termux from [F-Droid](https://f-droid.org/packages/com.termux/), not Google Play). Read the script before running it:
+
+```bash
+curl -fsSLO https://raw.githubusercontent.com/pocketclaw/pocketclaw/main/install.sh
+less install.sh
+bash install.sh
+```
+
+`install.sh` installs `proot-distro`, an Ubuntu container, Node.js 22.12.0 inside it, `openclaw@2026.2.12`, `hijack.js`, the `start-openclaw` / `restart-gw` / `healthcheck` / `pocketclaw` commands, two cron jobs and a Termux:Boot script. It sizes the V8 heap from your RAM (170, 256 or 384 MB).
+
+When it finishes, wait about two minutes and open `http://localhost:9000/setup` on the phone, or `http://<phone-ip>:9000/setup` from another device on the same WiFi, to enter your AI provider and Telegram token. Then add `POCKETCLAW_TOKEN` (see [Known limits](#known-limits)).
+
+### Path B: Android 5 and 6 (native, advanced)
+
+This is how the Moto E2 ran in v9: no proot, a cross-compiled Node.js and an LD_PRELOAD shim. Nothing here is prebuilt; you build the runtime yourself.
+
+**1. Termux.** Install Termux **v0.119.0-beta.3** `apt-android-5` from [GitHub Releases](https://github.com/termux/termux-app/releases/tag/v0.119.0-beta.3), then:
 
 ```bash
 pkg update -y
-pkg install -y proot-distro openssh
+pkg install -y openssh nodejs
 ```
 
-### Step 3 — Install Node.js
+Termux's own Node.js is too old to run OpenClaw. It is only used here for its `npm`.
 
-**Option A — Android 7+ (easy):**
+**2. Build the runtime** on a Linux machine:
+
+- `tools/build-node-icu.sh` cross-compiles Node.js for ARM32 Android with small-icu. It expects the Android NDK r26c in `~/android-ndk-r26c` and a Node.js source tree in `~/node`. The project used Node.js v22.12.0 (`git checkout v22.12.0`).
+- `tools/api23_compat.c` is the LD_PRELOAD shim. Compile it as a shared library (`libapi23compat.so`) with the NDK's ARM32 clang. The exact command was not recorded in this repo.
+
+Copy the results to the phone as `$PREFIX/bin/node22-icu` and `$PREFIX/lib/libapi23compat.so`.
+
+**3. Install OpenClaw**, in Termux:
+
 ```bash
-proot-distro install ubuntu
-proot-distro login ubuntu
-apt update && apt install -y curl ca-certificates
-curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
-apt install -y nodejs
-node -v   # v22.x
-exit
+export LD_PRELOAD=$PREFIX/lib/libapi23compat.so
+node22-icu $(which npm) install -g openclaw@2026.2.12
 ```
 
-**Option B — Android 5-6 / native (advanced):**
-
-Proot is too slow on 1GB devices. Cross-compile Node.js with NDK instead:
-```bash
-# On a Linux build machine (see tools/build-node-icu.sh)
-# Produces: node22-icu binary + libapi23compat.so
-# Deploy to: $PREFIX/bin/node22-icu, $PREFIX/lib/libapi23compat.so
-```
-
-### Step 4 — Install OpenClaw
+**4. Deploy the PocketClaw scripts.** On your PC:
 
 ```bash
-# Option A (proot):
-proot-distro login ubuntu
-npm install -g openclaw
-exit
-
-# Option B (native): use node22-icu to run npm
-node22-icu $(which npm) install -g openclaw
-```
-
-### Step 5 — Deploy PocketClaw files
-
-Clone this repo on your PC and push files to the phone:
-
-```bash
-# On your PC
 git clone https://github.com/pocketclaw/pocketclaw.git
 cd pocketclaw
-
-# Push scripts to the phone
-adb push scripts/hijack.js /sdcard/Download/
-adb push scripts/start-openclaw.sh /sdcard/Download/
-adb push scripts/restart-gw.sh /sdcard/Download/
-adb push scripts/boot-openclaw.sh /sdcard/Download/
-adb push config/openclaw.example.json /sdcard/Download/
-adb push config/env.example /sdcard/Download/
+adb push scripts/hijack.js scripts/start-openclaw.sh scripts/restart-gw.sh \
+  scripts/boot-openclaw.sh scripts/pocketclaw.sh config/openclaw.example.json /sdcard/Download/
 ```
 
-Then in Termux:
+Then in Termux (the scripts still read their config from the historical proot path, so create it even without proot):
+
 ```bash
 PREFIX=/data/data/com.termux/files/usr
 ROOTFS=$PREFIX/var/lib/proot-distro/installed-rootfs/ubuntu
+mkdir -p $ROOTFS/root/.openclaw
 
-# Install scripts
 cp /sdcard/Download/start-openclaw.sh $PREFIX/bin/start-openclaw
 cp /sdcard/Download/restart-gw.sh $PREFIX/bin/restart-gw
-chmod +x $PREFIX/bin/start-openclaw $PREFIX/bin/restart-gw
+cp /sdcard/Download/pocketclaw.sh $PREFIX/bin/pocketclaw
+chmod +x $PREFIX/bin/start-openclaw $PREFIX/bin/restart-gw $PREFIX/bin/pocketclaw
 
-# Install hijack.js and config
 cp /sdcard/Download/hijack.js $ROOTFS/root/hijack.js
-mkdir -p $ROOTFS/root/.openclaw
 cp /sdcard/Download/openclaw.example.json $ROOTFS/root/.openclaw/openclaw.json
 ```
 
-### Step 6 — Get your API keys
+Edit `openclaw.json` for your provider (see [Configuration](#configuration)).
 
-**AI Provider API Key:** Pick any provider from the [Pick Your AI](#-pick-your-ai) section below. Get an API key from their dashboard.
+**5. Add your keys.** From your PC, `./tools/setup-keys.sh` asks for each key (including `POCKETCLAW_TOKEN`) and pushes them to `/sdcard/Download/pocketclaw-env`. `start-openclaw` imports that file into `$ROOTFS/root/.openclaw/env` on its next start, sets it to mode 600 and deletes the drop file. You can also pass a filled copy of `config/env.example`: `./tools/setup-keys.sh my-keys.env`.
 
-**Telegram Bot Token:**
-1. Message [@BotFather](https://t.me/BotFather) on Telegram
-2. `/newbot` → follow prompts → copy the token
-
-### Step 7 — Configure API keys
-
-**Option A — Interactive setup (easiest):**
-```bash
-# On your PC — asks for each key, pushes to phone, restarts gateway
-./tools/setup-keys.sh
-```
-
-**Option B — From a pre-filled file:**
-```bash
-# Copy and fill in your keys
-cp config/env.example my-keys.env
-# Edit my-keys.env with real values, then:
-./tools/setup-keys.sh my-keys.env
-```
-
-**Option C — Manual (via Termux SSH):**
-```bash
-cat > $ROOTFS/root/.openclaw/env << EOF
-KIMI_API_KEY=sk-kimi-YOUR_ACTUAL_KEY
-MOONSHOT_API_KEY=sk-kimi-YOUR_ACTUAL_KEY
-TELEGRAM_BOT_TOKEN=1234567890:YOUR_ACTUAL_TOKEN
-OPENAI_API_KEY=sk-proj-YOUR_ACTUAL_KEY
-EOF
-chmod 600 $ROOTFS/root/.openclaw/env
-```
-
-> **OPENAI_API_KEY is optional** — only needed for voice message transcription (Whisper). The bot works fine without it, you just won't be able to send voice notes.
-
-### Step 8 — Launch
+**6. Launch:**
 
 ```bash
 restart-gw
 ```
 
-Wait 30-60 seconds. Then open Telegram and message your bot.
+Wait 30 to 60 seconds, then message your bot on Telegram.
 
-**If it replies, you're done.**
+### Auto-start on boot (Path B; Path A does this for you)
 
-### Step 9 — Auto-start on boot (optional)
-
-Install [Termux:Boot](https://github.com/termux/termux-boot/releases) and set up auto-start:
+Install [Termux:Boot](https://github.com/termux/termux-boot/releases/tag/v0.8.1) and open it once on the phone so it registers:
 
 ```bash
-# Install via ADB from PC
 curl -L -o termux-boot.apk "https://github.com/termux/termux-boot/releases/download/v0.8.1/termux-boot-app_v0.8.1+github.debug.apk"
 adb install termux-boot.apk
-# Open the app ONCE on the phone to activate it
 ```
 
 ```bash
-# In Termux: install boot script
+# In Termux
 mkdir -p ~/.termux/boot
 cp /sdcard/Download/boot-openclaw.sh ~/.termux/boot/start-pocketclaw.sh
 chmod +x ~/.termux/boot/start-pocketclaw.sh
 ```
 
-Now unplug the phone. Put it in a drawer. It restarts everything on its own after a reboot.
+> Never `am force-stop com.termux.boot`: it blocks `BOOT_COMPLETED` and the bot stops auto-starting.
 
-### Step 10 — Debloat (recommended for 1GB devices)
-
-Run the debloat script to free ~360 MB of RAM:
+### Keep it running 24/7
 
 ```bash
-# On your PC, via ADB
+# On your PC, once
+adb shell settings put global wifi_sleep_policy 2          # WiFi never sleeps
+adb shell dumpsys deviceidle whitelist +com.termux         # Exempt Termux from Doze
+adb shell dumpsys deviceidle disable                       # Disable Doze
+```
+
+Let the screen sleep normally. `start-openclaw` restarts the gateway 10 seconds after any exit, and the healthcheck cron restarts it if it stops answering.
+
+### Debloat (Moto E2 only, at your own risk)
+
+`restore-debloat.sh` runs from your PC over ADB and removes over a hundred packages, including SystemUI and Google services. **The list was written for one Motorola Moto E2.** On another phone it can remove things you need. Read the script, adapt the list, and save your own package list first (`adb shell pm list packages > my-packages.txt`).
+
+```bash
 ./restore-debloat.sh
 adb reboot
 ```
 
-This removes 131 packages (Google, Motorola bloat, telephony, SystemUI, media providers) and applies server-mode tuning. See `debloat-snapshot-v7.txt` for the full state.
-
-> **WARNING:** Never `am force-stop com.termux.boot` — it prevents auto-start on reboot.
-
-### Step 11 — Harden for 24/7 (recommended)
-
-The phone will sleep with the screen off. These settings keep WiFi and Termux alive in the background:
-
-```bash
-# On your PC, via ADB — run once
-adb shell settings put global wifi_sleep_policy 2          # WiFi never sleeps
-adb shell dumpsys deviceidle whitelist +com.termux         # Exempt Termux from Doze
-adb shell dumpsys deviceidle disable                       # Disable Doze entirely
-```
-
-> **Don't disable screen sleep.** The phone should go to sleep normally — WiFi stays on, Termux runs in the background, and the watchdog restarts the gateway if it ever crashes.
-
-The `start-openclaw` script includes a **watchdog loop**: if the gateway dies (network error, OOM, etc.), it waits 10 seconds, cleans lock files, and restarts automatically. No manual intervention needed.
+`setup.sh` (Path A) offers a much smaller, optional debloat list instead.
 
 ---
 
-## 🧠 Pick Your AI
+## Known limits
 
-OpenClaw works with **30+ providers** out of the box. Just change the provider, model name, and API key in `openclaw.json`. Model format is always `provider/model-name`.
-
-### Free tier providers (no credit card needed)
-
-| Provider | ID | Free Tier | Best Models | Context |
-|---|---|---|---|---|
-| **[Google Gemini](https://ai.google.dev/)** | `google` | 1,000 req/day, 250K TPM | Gemini 2.5 Pro/Flash | **1M** |
-| **[Groq](https://console.groq.com/)** | `groq` | 500K tokens/day | Llama 4, Qwen3 | 131K |
-| **[Cerebras](https://cloud.cerebras.ai/)** | `cerebras` | ~1M tokens/day | Llama 3.3 70B, GLM 4.7 | 128K |
-| **[SambaNova](https://cloud.sambanova.ai/)** | custom | 10-30 RPM | Llama 405B | 128K |
-| **[OpenRouter](https://openrouter.ai/)** | `openrouter` | Free `:free` models | DeepSeek, Gemini, Llama | Varies |
-| **[Mistral](https://console.mistral.ai/)** | `mistral` | 1B tokens/month (2 RPM) | Mistral Small, Pixtral | 128K |
-| **[Venice AI](https://venice.ai/)** | `venice` | Free tier available | Llama 3.3 70B | 128K |
-
-### Paid providers
-
-| Provider | ID | Pricing | Best Models | Context |
-|---|---|---|---|---|
-| **[Anthropic](https://console.anthropic.com/)** | `anthropic` | Pay-per-token | Claude Opus 4.6, Sonnet 4.5 | 200K |
-| **[OpenAI](https://platform.openai.com/)** | `openai` | Pay-per-token | GPT-5.2, GPT-5 Mini | 128K |
-| **[Kimi Coding](https://kimi.com/code)** | custom | ~$19/month | Kimi K2.5 | 262K |
-| **[xAI (Grok)](https://x.ai/api)** | `xai` | $25 free credit then paid | Grok 4, Grok 4 Mini | 131K |
-| **[DeepSeek](https://platform.deepseek.com/)** | custom | $0.03-$0.42/M tokens | DeepSeek V3.2, R1 | 128K |
-| **[Amazon Bedrock](https://aws.amazon.com/bedrock/)** | `amazon-bedrock` | AWS pricing | Claude, Llama, etc. | Varies |
-| **[Google Vertex AI](https://cloud.google.com/vertex-ai)** | `google-vertex` | GCP pricing | Gemini models | 1M |
-| **[Z.AI (Zhipu)](https://open.bigmodel.cn/)** | `zai` | Pay-per-token | GLM-4.7, GLM-4.6v | 128K |
-| **[MiniMax](https://www.minimax.io/)** | custom | Pay-per-token | MiniMax M2.1 | 128K |
-
-### Local models (free, runs on your network)
-
-| Provider | ID | Setup |
-|---|---|---|
-| **[Ollama](https://ollama.com/)** | `ollama` | Auto-discovered at `localhost:11434` |
-| **[LM Studio](https://lmstudio.ai/)** | custom | `http://localhost:1234/v1` |
-| **[vLLM](https://docs.vllm.ai/)** | custom | Any OpenAI-compatible `/v1` endpoint |
-
-> **This guide uses Kimi K2.5** because that's what we stress-tested PocketClaw with. But if you want $0/month, grab a free provider above — **Gemini and Groq** are the easiest to set up. For full privacy, run a local model with Ollama.
+- **Dashboard authentication is off by default.** The dashboard and its API listen on port 9000 for the whole local network. Unless `POCKETCLAW_TOKEN` is set in the env file, anyone on that network can read status and logs, change API keys, toggle modules, restart the gateway or trigger the debloat. With the token set, the API endpoints that change something require it (header `X-PocketClaw-Token` or `?token=`). The built-in dashboard pages do not send the token yet, so their KEYS and CTRL buttons answer `401` once a token is set; use `tools/setup-keys.sh` and the CLI instead.
+- **Read-only endpoints stay open** even with a token: `/api/status`, `/api/history`, `/api/heap`, `/api/logs`, `/api/modules`. Logs can contain message contents.
+- **No updates.** The project pins OpenClaw 2026.2.12 and Node.js 22.12.0, both behind on security fixes. Newer OpenClaw needs Node.js 24+, which is out of reach of the Android 6 build.
+- **One test device.** Only the Moto E2 was tested end to end. Path A was written for Android 7+ but not validated on a range of phones.
+- **Memory leak.** On 1 GB the gateway grew about 2 MB/h and was restarted every 6 hours.
+- **Some scripts in `tools/` are experiments** (kernel tuning tests, Dirty COW payloads, proot tests) kept for the record. Only the ones referenced in this guide are part of the setup.
 
 ---
 
-## ⚙️ Configuration
+## Pick your AI
+
+OpenClaw talks to many providers. You set the provider, model name and API key in `openclaw.json`, with models written as `provider/model-name`. The project was tested with **Kimi K2.5**. Other providers that OpenClaw 2026.2.x supported include Google Gemini, Groq, Cerebras, OpenRouter, Mistral, Anthropic, OpenAI, xAI, DeepSeek, Amazon Bedrock and local servers such as Ollama, LM Studio or vLLM (any OpenAI-compatible `/v1` endpoint).
+
+Free tiers, prices and model names change often. Check the provider's own page before choosing, and set a spending limit on the key you put on the phone.
+
+---
+
+## Configuration
 
 ### Critical settings in `openclaw.json`
 
 | Setting | Why it matters |
 |---|---|
-| `User-Agent: claude-code/1.0` | **Kimi only.** Kimi API blocks requests without a recognized coding agent header. Not needed for other providers. |
-| `plugins.entries.telegram.enabled: true` | **Required.** Without this, Telegram won't load even if `channels.telegram` is configured. |
-| `reasoning: false` | Prevents extended thinking mode that can cause empty responses. |
-| `network.autoSelectFamily: true` | Enables dual-stack IPv4/IPv6 for better connectivity. |
-| `--max-old-space-size=170` | Caps V8 heap. Startup peaks ~146 MB, grows ~2 MB/h (leak). Restart every 6h. |
-| `--expose-gc` | Enables `global.gc()`. Combined with hijack.js timer, frees ~10 MB every 30s. |
-| `maxConcurrency: 1` | One request at a time. More would OOM on 1 GB RAM. |
+| `User-Agent: claude-code/1.0` | **Kimi only.** In February 2026 the Kimi coding API rejected requests without a recognized coding agent header. Not needed for other providers. |
+| `plugins.entries.telegram.enabled: true` | **Required.** Without it, Telegram does not load even if `channels.telegram` is configured. |
+| `reasoning: false` | Avoids extended thinking mode, which produced empty replies. |
+| `network.autoSelectFamily: true` | Dual-stack IPv4/IPv6. |
+| `maxConcurrency: 1` | One request at a time. More would OOM on 1 GB. |
 
-See [`config/openclaw.example.json`](config/openclaw.example.json) for the full working configuration.
+Node flags (`--max-old-space-size`, `--expose-gc`, `--max-semi-space-size`) are set in `start-openclaw`. See [`config/openclaw.example.json`](config/openclaw.example.json) for the full configuration that ran on the phone, and [`config/env.example`](config/env.example) for the keys.
 
 ---
 
-## 🔧 Troubleshooting
+## Troubleshooting
 
 <details>
 <summary><b>Bot doesn't respond</b></summary>
 
 1. Check processes: `ps | grep openclaw`
 2. Check logs: `tail -20 $PREFIX/tmp/openclaw-gateway.log`
-3. Test Telegram: `node22-icu -e "fetch('https://api.telegram.org/botTOKEN/getMe').then(r=>r.json()).then(console.log)"`
+3. Check the bot token with the Telegram `getMe` endpoint from a machine you trust (do not paste the token into logs or issues).
 </details>
 
 <details>
@@ -577,45 +439,32 @@ Network issue. Check WiFi. If IPv4 routing is broken, reboot the phone.
 </details>
 
 <details>
-<summary><b>"403 Kimi For Coding is currently only available for Coding Agents"</b></summary>
+<summary><b>Gateway won't start, "already running"</b></summary>
 
-The `User-Agent: claude-code/1.0` header is missing. Set it at **both** provider and model level in `openclaw.json`.
-</details>
-
-<details>
-<summary><b>"Message ordering conflict"</b></summary>
-
-Send `/new` to the bot. This resets the session after gateway restarts.
-</details>
-
-<details>
-<summary><b>Gateway won't start / "already running"</b></summary>
-
-Stale lock files. Use `restart-gw` (handles cleanup automatically) or manually:
+Stale lock files. `restart-gw` cleans them, or manually:
 ```bash
 rm -f $ROOTFS/tmp/openclaw/*.lock
 ```
 </details>
 
 <details>
-<summary><b>Out of memory / phone freezes</b></summary>
+<summary><b>Gateway refuses to start after an OpenClaw update</b></summary>
 
-- Verify `--max-old-space-size=170` is in NODE_OPTIONS
-- Run `restore-debloat.sh` to remove bloat packages
-- Kill dormant services: `am force-stop com.android.settings` etc.
-- **Never kill** `com.termux` or `com.termux.boot`
+Check `openclaw --version`. If it is not 2026.2.x, reinstall the pinned version (`openclaw@2026.2.12`). Recent releases require Node.js 24.16+.
 </details>
 
 <details>
-<summary><b>Gateway OOM at startup</b></summary>
+<summary><b>Out of memory, phone freezes</b></summary>
 
-Startup peaks at ~146 MB. Memory leak grows heap ~2 MB/h. V8 heap 170 MB with restart every 6h keeps it stable. 150 MB OOMs during startup.
+- Check that `--max-old-space-size` is in `NODE_OPTIONS`
+- On the Moto E2, run the debloat
+- **Never kill** `com.termux` or `com.termux.boot`
 </details>
 
 <details>
 <summary><b>Stuck in Settings (no back button)</b></summary>
 
-If SystemUI is uninstalled, there's no system nav bar outside the launcher. Use:
+If SystemUI was removed, there is no navigation bar outside the launcher:
 ```bash
 adb shell input keyevent KEYCODE_BACK
 adb shell input keyevent KEYCODE_HOME
@@ -625,108 +474,64 @@ adb shell input keyevent KEYCODE_HOME
 <details>
 <summary><b>Bot doesn't auto-start after reboot</b></summary>
 
-Check if `com.termux.boot` was force-stopped. `am force-stop` sets the "stopped" flag which blocks `BOOT_COMPLETED` broadcasts. Fix:
+`com.termux.boot` was probably force-stopped. Open the Termux:Boot app once, or:
 ```bash
-# Open Termux:Boot app manually once, or:
 adb shell monkey -p com.termux.boot -c android.intent.category.LAUNCHER 1
 ```
 </details>
 
----
-
-## 📸 Screenshots
-
-<div align="center">
-
-| Dashboard v2.3 | Crab Art v2 | Dashboard v2.2 |
-|---|---|---|
-| <img src="crab-final.png" width="180"> | <img src="crab-screenshot3.png" width="180"> | <img src="dashboard-screenshot.png" width="180"> |
-
-</div>
+More in [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
 
 ---
 
-## 📂 Project Structure
+## Project Structure
 
 ```
 pocketclaw/
-├── README.md                      # You are here
-├── HACKS.md                       # The 57 hacks — the full war story (how we did it)
-├── CONTRIBUTING.md                 # How to contribute
-├── LICENSE                         # MIT
-├── restore-debloat.sh             # One-script debloat (126 packages + tuning)
-├── active-packages.txt            # Current 13 active packages
-├── debloat-snapshot-v7.txt        # Full system state (native gateway)
-├── ram-snapshot-v5.txt            # dumpsys meminfo snapshot
+├── README.md                  # You are here
+├── HACKS.md                   # The 57 hacks, the full story
+├── TROUBLESHOOTING.md         # More fixes
+├── SECURITY.md                # How to report a vulnerability
+├── CHANGELOG.md               # Release notes
+├── setup.sh                   # PC-side setup over ADB (Path A)
+├── install.sh                 # Termux installer, proot (Path A)
+├── install-local.sh           # Offline variant of the installer, Moto E2 era
+├── restore-debloat.sh         # Moto E2 debloat over ADB
 ├── config/
-│   ├── openclaw.example.json      # Working config (copy & fill in keys)
-│   └── env.example                # API key template
+│   ├── openclaw.example.json  # Configuration that ran on the phone
+│   └── env.example            # API key template
 ├── scripts/
-│   ├── start-openclaw.sh          # Native gateway launcher with watchdog loop
-│   ├── restart-gw.sh              # Clean kill + restart (handles process.title)
-│   ├── boot-openclaw.sh           # Termux:Boot auto-start + cron setup
-│   ├── pocketclaw.sh              # CLI: start/stop/restart/status/logs/monitor
-│   ├── healthcheck.sh             # Cron: restart gateway if unresponsive
-│   ├── logrotate.sh               # Cron: trim logs and CSV to 24h
-│   ├── wifi-watchdog.sh           # WiFi connectivity watchdog
-│   └── hijack.js                  # Runtime patch: GC + 3-page dashboard + lazy loading v3 + fs path rewriting
+│   ├── start-openclaw.sh      # Native gateway launcher with watchdog loop (Path B)
+│   ├── restart-gw.sh          # Clean kill + restart
+│   ├── boot-openclaw.sh       # Termux:Boot auto-start + crons
+│   ├── pocketclaw.sh          # CLI: start/stop/restart/status/logs/monitor
+│   ├── healthcheck.sh         # Cron: restart gateway if unresponsive
+│   ├── logrotate.sh           # Cron: trim logs
+│   ├── wifi-watchdog.sh       # WiFi connectivity watchdog
+│   └── hijack.js              # Runtime patches: GC, dashboard, lazy loading, fs path rewriting
 ├── tools/
-│   ├── api23_compat.c             # LD_PRELOAD shim: 11 API 24 symbols for Android 6
-│   ├── build-node-icu.sh          # NDK cross-compile Node.js 22 with ICU for ARM
-│   ├── windows/
-│   │   ├── pocketclaw-boot.ps1    # Windows auto daemon-stopper on USB connect
-│   │   └── Register-PocketClawBoot.ps1  # Register as Windows Scheduled Task
-│   ├── start-pocketclaw.sh        # Boot script (WiFi wait, setsid gateway, merged kill loop)
-│   ├── kill-dalvik.sh             # Cron: kill Termux Dalviks after gateway detach
-│   ├── fix-stubs.sh               # Fix ESM stubs for bind-mount setup
-│   ├── fix-and-install.sh         # Full install automation
-│   ├── set-static-ip.sh           # Static IP configuration
-│   ├── crash-dismisser.sh         # Auto-dismiss crash dialogs
-│   ├── kernel-tune.c              # Kernel parameter tuner (sysctl)
-│   └── check-git.sh              # Git wrapper verification
-├── apk/
-│   ├── AndroidManifest.xml        # Launcher APK manifest (HOME intent)
-│   └── src/.../LauncherActivity.java  # Native dashboard — no WebView
-└── *.png                          # Screenshots
-```
-
-### On the phone
-
-```
-$PREFIX/bin/
-  ├── node22-icu           # NDK cross-compiled Node.js 22.12.0 (small-icu)
-  ├── node22-icu           # Node.js with ICU (fallback if Intl needed)
-  ├── start-openclaw       # Native gateway + watchdog loop
-  ├── restart-gw           # Clean kill + restart
-  ├── pocketclaw           # CLI
-  ├── healthcheck          # Cron every 2 min
-  ├── kill-dalvik          # Cron every 2 min — kill Termux Dalviks
-  └── logrotate-pc         # Cron every hour
-
-$PREFIX/lib/
-  └── libapi23compat.so    # LD_PRELOAD shim (11 API 24 symbols)
-
-~/.termux/boot/
-  └── start-pocketclaw.sh  # Auto-start: WiFi wait → gateway → killer loops
-
-$ROOTFS/root/
-  ├── hijack.js            # GC + 3-page dashboard + lazy loading v3 + fs path rewriting
-  └── .openclaw/
-      ├── openclaw.json    # Config with real keys
-      └── env              # API keys
+│   ├── api23_compat.c         # LD_PRELOAD shim: 11 API 24 symbols for Android 6
+│   ├── build-node-icu.sh      # NDK cross-compile of Node.js 22 for ARM32
+│   ├── setup-keys.sh          # Push API keys to the phone over ADB
+│   ├── kill-dalvik.sh         # Cron: kill Termux Dalviks after gateway detach
+│   ├── dirtycow.c             # CVE-2016-5195, used on the owner's own phone
+│   ├── windows/               # Optional Windows helpers (daemon stopper on USB connect)
+│   └── ...                    # Experiments kept for the record
+├── apk/                       # Native launcher (Java, Canvas, no WebView)
+└── *.png, *-snapshot-*.txt    # Screenshots and measurements from February 2026
 ```
 
 ---
 
 ## The 57 Hacks
 
-Every single problem we hit — and the hack that fixed it. From proot crashes to Dirty COW kernel exploits, from cross-compiling Node.js with NDK to shimming 11 missing API 24 symbols via LD_PRELOAD. From OOM at 96 MB heap to killing Dalvik VMs post-boot for Dalvik-free operation.
+Every problem hit along the way and how it was worked around: proot crashes, a Dirty COW kernel exploit, cross-compiling Node.js with the NDK, shimming 11 missing API 24 symbols with LD_PRELOAD, OOM at a 96 MB heap, killing Dalvik VMs after boot.
 
-**[Read the full story →](HACKS.md)**
+**[Read the full story](HACKS.md)**
 
 ---
 
-## Tested With
+## Tested with
 
 | Component | Version |
 |---|---|
@@ -734,38 +539,27 @@ Every single problem we hit — and the hack that fixed it. From proot crashes t
 | Android | 6.0 Marshmallow |
 | RAM | 1 GB (898 MB usable) |
 | Termux | v0.119.0-beta.3 (apt-android-5) |
-| Node.js | 22.12.0 (NDK cross-compiled with small-icu, native — no proot) |
-| OpenClaw | 2026.2.9 |
-| AI Model | Kimi K2.5 (works with [any provider](#-pick-your-ai)) |
-| Debloat | v9 — 13 packages, native node22-icu, lazy proxies, setsid + kill-dalvik, ~310 MB total |
+| Node.js | 22.12.0 (NDK cross-compiled with small-icu, native, no proot) |
+| OpenClaw | 2026.2.9, then 2026.2.12 |
+| AI model | Kimi K2.5 |
+| Date | February 2026 |
 
 ---
 
-## Contributing
+## Contributing and security
 
-Got it running on a different phone? Found a better hack? Want to add support for another AI provider?
-
-**[See CONTRIBUTING.md →](CONTRIBUTING.md)**
-
----
+Device reports, fixes and documentation corrections are welcome, on a best-effort basis: see [CONTRIBUTING.md](CONTRIBUTING.md). To report a vulnerability in this repository, see [SECURITY.md](SECURITY.md). Vulnerabilities in the agents themselves (OpenClaw and others) belong upstream, and we track them at [pocketclaw.dev/cves](https://pocketclaw.dev/cves).
 
 ## License
 
-MIT — do whatever you want with it.
+[MIT](LICENSE).
 
 ---
 
 <div align="center">
 
-**Built with stubbornness on a mass of impossible constraints.**
+*A phone from 2015. 1 GB of RAM. Native Node.js. 57 hacks. It worked, in February 2026.*
 
-*A phone from 2015. 1GB of RAM. 131 packages debloated. Native Node.js. Dalvik-free. 57 hacks.*<br>
-*If it can run AI, anything can.*
-
-**[Star this repo](https://github.com/pocketclaw/pocketclaw)** if you think old phones deserve a second life.
+**[pocketclaw.dev](https://pocketclaw.dev)**
 
 </div>
-
----
-
-*PocketClaw v9 — Native Gateway*

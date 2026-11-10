@@ -1,65 +1,29 @@
 # Contributing to PocketClaw
 
-First off — thanks for considering contributing! This project was born from pure stubbornness and a $0 phone. Every improvement helps someone turn their old phone into something useful.
+PocketClaw is a February 2026 experiment kept online on a best-effort basis. Contributions are welcome, but reviews can be slow and there is no roadmap.
 
-## Ways to Contribute
+The active project is [pocketclaw.dev](https://pocketclaw.dev) (hardware guide, CVE tracker for self-hosted agents). Its code is not in this repository.
 
-### Got it running on a different phone?
+## Useful contributions
 
-We'd love to hear about it! Open an issue with:
-- Phone model and year
-- Android version
-- RAM amount
-- Which hacks you needed (and which you didn't)
-- Any new issues you hit
+- **Device reports.** Got it running, or failing, on another phone? Open an issue with the [phone report template](.github/ISSUE_TEMPLATE/phone_report.md): model, Android version, RAM, Termux, Node.js and OpenClaw versions, which hacks you needed.
+- **Fixes to scripts or docs**, especially where the README no longer matches what happens on a real device.
+- **Better hacks.** If you found a cleaner fix for one of the [57 hacks](HACKS.md), say which one, why it is better, and what you tested it on.
 
-This helps us build a compatibility table and improve the guide.
+Security problems: see [SECURITY.md](SECURITY.md), not a public issue.
 
-### Found a better hack?
+## Pull requests
 
-If you found a cleaner solution to any of the [57 hacks](HACKS.md), open a PR! Include:
-- Which hack it replaces or improves
-- Why the new approach is better
-- What you tested it on
+1. Fork, branch from `main`, one change per PR.
+2. Test on real hardware when the change touches the phone side, and say what you tested on. Do not claim results you did not measure.
+3. Keep it light: this targets 1 GB devices, so no heavy dependencies.
+4. Update the README or the example config when you change behavior.
+5. Never commit API keys, bot tokens or `config/env`.
 
-### Want to add another AI provider?
+CI checks the JavaScript syntax. Its Java compile step is currently skipped (the android.jar download it relies on is gone), so compile the launcher locally against the Android 6.0 (API 23) platform if you change it.
 
-Kimi K2.5 isn't the only free option. If you got another provider working:
-1. Document the provider config for `openclaw.json`
-2. Note any special headers or auth requirements
-3. Include the free tier limits (context window, rate limits, cost)
+## Style
 
-### Found a bug?
-
-Open an issue using the [bug report template](.github/ISSUE_TEMPLATE/bug_report.md). The more details, the better — especially logs and your phone specs.
-
-## Pull Request Process
-
-1. **Fork the repo** and create your branch from `main`
-2. **Test on actual hardware** if possible (the whole point is old phones)
-3. **Update docs** — if you change config format or scripts, update README.md and the relevant examples
-4. **Keep it simple** — this project runs on 1GB RAM devices. Don't add heavy dependencies
-5. **One thing per PR** — easier to review, easier to merge
-
-## Code Style
-
-This project is mostly shell scripts and config files. Keep it readable:
-
-- Shell scripts: use `#!/data/data/com.termux/files/usr/bin/bash` for Termux scripts
-- Comments: explain *why*, not *what* (the code shows what)
-- Config: keep `openclaw.example.json` in sync with any config changes
-
-## Commit Messages
-
-Keep them short and descriptive:
-- `fix: resolve IPv6 DNS fallback on Android 7+`
-- `feat: add Groq provider config`
-- `docs: add Samsung Galaxy S5 to tested devices`
-
-## Questions?
-
-Open an issue tagged `question`. No question is too basic — if you're stuck getting an old phone to run AI, you're already doing something impressive.
-
----
-
-**Remember:** if it runs on a Moto E2 from 2015, it runs on anything. Every contribution makes that easier for the next person.
+- Termux scripts start with `#!/data/data/com.termux/files/usr/bin/bash`.
+- Comments explain why, not what.
+- Commit messages are short and descriptive, for example `fix: handle IPv6 DNS fallback`.
